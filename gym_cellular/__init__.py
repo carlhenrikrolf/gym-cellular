@@ -2,7 +2,7 @@ from gymnasium.envs.registration import register
 
 register(
 	id="gym_cellular/GridWorld-v0",
-	entry_point="gym_cellular.envs:Gridworldenv",
+	entry_point="gym_cellular.envs:GridWorldEnv",
 	max_episode_steps=300,
 )
 # id, directory, settings

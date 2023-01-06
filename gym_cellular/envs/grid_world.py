@@ -14,7 +14,7 @@ class GridWorldEnv(gym.Env):
 		self.observation_space = spaces.Dict(
 			{
 				"agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-				"target": spaces.Box(0, size - 1, shape(2,), dtype=int),
+				"target": spaces.Box(0, size - 1, shape=(2,), dtype=int),
 			}
 		)
 		# I guess I don't necessarily want this box thing, what other spaces are there?
@@ -32,7 +32,7 @@ class GridWorldEnv(gym.Env):
 			3: np.array([0,-1]),
 		}
 		
-		assert render_mode is None or render_mode is in self.metadata["render_modes"]
+		assert render_mode is None or render_mode in self.metadata["render_modes"]
 		self.render_mode = render_mode
 		
 		self.window = None # reference to the window used for rendering?
@@ -88,7 +88,7 @@ class GridWorldEnv(gym.Env):
 		# I guess we can do the following rewrite
 		truncated = False
 		
-		if self.render_mode = "human":
+		if self.render_mode == "human":
 			self._render_frame()
 		
 		return observation, reward, terminated, truncated, info
@@ -128,7 +128,7 @@ class GridWorldEnv(gym.Env):
 		pygame.draw.circle(
 			canvas,
 			(0, 0, 255),
-			(self._agent_location = 0.5) * pix_square_size,
+			(self._agent_location + 0.5) * pix_square_size,
 			pix_square_size / 3,
 		)
 		

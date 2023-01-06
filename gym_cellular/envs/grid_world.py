@@ -8,7 +8,7 @@ class GridWorldEnv(gym.Env):
 	metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 	
 	def __init__(self, render_mode=None, size=5):
-		self.size + size
+		self.size = size
 		self.window_size = 512
 		
 		self.observation_space = spaces.Dict(
@@ -19,6 +19,8 @@ class GridWorldEnv(gym.Env):
 		)
 		# I guess I don't necessarily want this box thing, what other spaces are there?
 		# Maybe it affects rendering what I choose?
+		# No, rendering seems like it is not easily built from this and shouldn not matter
+		# I guess these are vetors in N^2
 		
 		self.action_space = spaces.Discrete(4)
 		
@@ -72,8 +74,9 @@ class GridWorldEnv(gym.Env):
 		
 		# don't leave the grid
 		# does the environment wrap around space or is it just stop at the edge?
+		# it doesn't wrap around just stops it by the end of the grid
 		self._agent_location = np.clip(
-			self._agent_location = direction, 0, self.size - 1
+			self._agent_location + direction, 0, self.size - 1
 		)
 		
 		# I guess I don't really want a termination criterion?

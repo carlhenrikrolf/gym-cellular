@@ -50,13 +50,23 @@ class PolarisationEnv(gym.Env):
 		
 		### MODERATORS ###
 		
+		# initialise the moderator probability function
 		_moderator_probs = np.random.rand((n_users - 1, n_users - 1, n_user_states - 1, n_user_states - 1))
+		# picking the set of moderators from the set of users
+		set_of_moderators = np.random.choice(n_users, n_moderators, replace=False)
+		# making the complement such that they are silent
+		set_of_nonmoderators = np.setdiff1d(np.array(range(0, n_users)), set_of_moderators)
+		for nonmoderator in set_of_nonmoderators:
+			for user in range(0, n_users):
+				for nonmoderator_state in range(0, n_user_states):
+					for user_state in range(0, n_user_states):
+						_moderator_probs = 0
 		# moderators are not uncertain about their own states
-		for user in range(0, n_users):
-			for user_state in range(0, n_user_states):
-				_moderator_probs[user, user, user_state, user_state] = 1
+		for moderator in set_of_moderators:
+			for moderator_state in range(0, n_user_states):
+				_moderator_probs[moderator, moderator, moderator_state, moderator_state] = 1
 		# strongly polarised moderators start keeping silent about mistakes from "their side"
-		for moderator in range(0, n_users):
+		for moderator in set_of_moderators:
 			_nonsilent_right_threshold = np.random.randint(self._safe_right_threshold, n_user_states)
                         _nonsilent_left_threshold = np.random.randint(0, self._safe_left_threshold + 1)
 			for user in range(0, n_users):
@@ -67,26 +77,6 @@ class PolarisationEnv(gym.Env):
 					for user_state in range(0, _safe_left_threshold):
 						_moderator_probs[moderator, user, moderator_state, user_state] = 0
 		
-		# construct the moderators as random functions
-		_moderator_probs = np.random.rand((n_user_states - 1, n_users - 1, n_users - 1))
-		#_moderator_probs = np.random.rand(n_user_states)
-		# moderators are not uncertain about their own states
-		for themself in range(0, n_users):
-			for user_state in range(0, n_user_states):
-				_moderator_probs[themself, themself, user_state] = 1
-		
-		for themself in range(0, n_users):
-			_nonsilent_right_threshold = np.random.randint(self._safe_right_threshold, n_user_states)
-			_nonsilent_left_threshold = np.random.randint(0, self._safe_left_threshold + 1)
-			for user in range(0, n_users):
-				for user_state in range(0, n_user_states):
-					if not _nonsilent_left_threshold <= _user_state <= _nonsilent_right_threshold:
-						_moderator_probs[themself, user, user_state] = 0
-		# real question: can moderators see users that have become polarised.
-		# yes? they can see comments made by certain users and see if that has become the result
-		# some users may be of the type that comments a lot and some may be more silent
-		# maybe we should have the stochasticity wrt to other users and determinism with respoect to self?
-		# if content gets very polarised, then ..
 		# when would moderators not work as moderators
 		# one case (a) could be that for any content that aligns with their views, they would not report that kind of content
 		# another case (b) is if content polarises the moderator themselves such that they will not report inappropriate content on their side
@@ -102,7 +92,7 @@ class PolarisationEnv(gym.Env):
 		assert render_mode is None
 		
 	def _get_obs(self):
-		return self._polarisation 
+		return self._polarisation
 		
 	def _get_info(self):
 		return {"true side effect": xxx } # fill out	
@@ -147,15 +137,15 @@ class PolarisationEnv(gym.Env):
 
 		# getting side effects (too extreme content) info from moderators
 		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')
-		for themself in range(0, self.n_users):
+		for moderator in range(0, self.n_users):
 			for user in range(0, self.n_users):
 				if self._safe_left_threshold <= self._polarisation[user] <= self._safe_right_threshold:
-					if self._moderator_probs[themself, user, self._polarisation[user]] > np.random.rand((1)):
-						_side_effects[themself, user] = "safe"
+					if self._moderator_probs[moderator, user, self._polarisation[moderator], self._polarisation[user]] > np.random.rand((1)):
+						_side_effects[moderator, user] = "safe"
 					else:
-						_side_effects[themself, user] = "silent"
+						_side_effects[moderator, user] = "silent"
 				else:
-					if self._moderator_probs[themself, user, self._polarisation[user]] > np.random.rand((1)):
+					if self._moderator_probs[moderator, user, self._polarisation[moderator], self._polarisation[user]] > np.random.rand((1)):
 						_side_effects[themself, user] = "unsafe"
 					else:
 						_side_effects[themself, user] = "silent"

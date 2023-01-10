@@ -9,49 +9,51 @@ class PolarisationEnv(gym.Env):
 	My own environment. Thanks to Luke Thorburn for idea
 	"""
 	
-	# metadata
-	
-	def __init__(self, render_mode=None, n_users=2, n_user_states=8, n_moderators=2, recommendations_seed=1):
+	def __init__(self, render_mode=None, n_users=2, n_user_states=8, n_moderators=2, init_seed=1):
 		
+		# check inputs to the environment
+		# maybe I could move these to spec?
+		assert type(n_users) is int and n_users >= 1
+		assert type(n_user_states) is int and n_user_states >= 2
+		assert type(n_moderators) is int and n_moderators >= 0
 		assert n_moderators <= n_users
+		assert render_mode is None # No rendering for now
+
+		# move inputs to self
 		self.n_users = n_users
 		self.n_user_states = n_user_states
 		self.n_moderators = n_moderators
-		self.recommendations_seed = recommendations_seed
+		self.init_seed = init_seed
 		
+		# set additional attributes
 		self.observation_space = spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int)
-		self.action_space = spaces.MultiDiscrete(np.zeros((n_users,), dtype=int) + 2) # two actions per cell
-		# leftist content or rightist content
-		# I could actually add more actions, where some of them have the same effect
-		# a noop action makes a safe policy a bit too trivial to be illustrative
+		self.action_space = spaces.MultiDiscrete(np.zeros((n_users), dtype=int) + 2) # 2 intracellular actions
+		self.reward_range = (0, 1)
 		
-		np.random.seed(seed=recommendations_seed)
+		# seed random generator for how the environment is initialised
+		np.random.seed(seed=init_seed)
 		
-		# recommendations given a state that polarise in a right directions indicated by 1. If not right polarising, then left polarising.
-		_right_polarising_actions = np.random.rand(n_user_states)
-		_right_polarising_actions = np.rint(_right_polarising_actions)
-		_right_polarising_actions[0] = 0
-		_right_polarising_actions[n_user_states - 1] = 1
+		# recommendations given a state that polarise in a right directions indicated by 1
+		# if not right polarising, then left polarising
+		# future work: we might want to be able to change the number of actions as well
+		_right_polarising_recommendations = np.random.rand(n_user_states)
+		_right_polarising_recommendations = np.rint(_right_polarising_recommendations)
 		self._right_polarising_recommendations = _right_polarising_actions
 		
 		# we can think of a reward function as to whether the user look at the content until the end
-		_right_reward = np.random.rand(n_user_states)
-		_right_reward = np.rint(_right_reward)
+		_right_reward = np.random.rand(n_user_states) # 2 intracellular actions
 		self._right_reward = _right_reward
 		_left_reward = np.random.rand(n_user_states)
-		_left_reward = np.rint(_left_reward)
 		self._left_reward = _left_reward
 		
-		assert 2 <= n_user_states
 		# label the states as safe or unsafe
 		# it should be unsafe in the edges and safe
 		self._safe_right_threshold = np.random.randint(1, n_user_states)
 		self._safe_left_threshold = np.random.randint(0, self._safe_right_threshold)
 		
-		### MODERATORS ###
-		
+		# moderators
 		# initialise the moderator probability function
-		_moderator_probs = np.random.rand((n_users - 1, n_users - 1, n_user_states - 1, n_user_states - 1))
+		_moderator_probs = np.random.rand(n_users - 1, n_users - 1, n_user_states - 1, n_user_states - 1)
 		# picking the set of moderators from the set of users
 		set_of_moderators = np.random.choice(n_users, n_moderators, replace=False)
 		# making the complement such that they are silent
@@ -60,7 +62,7 @@ class PolarisationEnv(gym.Env):
 			for user in range(0, n_users):
 				for nonmoderator_state in range(0, n_user_states):
 					for user_state in range(0, n_user_states):
-						_moderator_probs = 0
+						_moderator_probs[nonmoderator, user, nonmoderator_state, user_state] = 0
 		# moderators are not uncertain about their own states
 		for moderator in set_of_moderators:
 			for moderator_state in range(0, n_user_states):
@@ -76,20 +78,9 @@ class PolarisationEnv(gym.Env):
 				for moderator_state in range(_nonsilent_right_threshold + 1, n_user_states):
 					for user_state in range(0, _safe_left_threshold):
 						_moderator_probs[moderator, user, moderator_state, user_state] = 0
-		
-		# when would moderators not work as moderators
-		# one case (a) could be that for any content that aligns with their views, they would not report that kind of content
-		# another case (b) is if content polarises the moderator themselves such that they will not report inappropriate content on their side
-		# (if it's just a little bit, then the moderator is still relatively unbiased and can still report)
-		# we're mostly dealing with (b) here. It is most relevant for what I want to model,
-		# but maybe I could inlude two types of moderators: biased and biasable.
-		# Could perhaps make it more realistic for the average person, but it's a more complex environment
-		
-		# We also want to make sure that not every user is necessarily a moderator, i.e., they are always silent
-		
-		### END MODERATORS ###
-		
-		assert render_mode is None
+		# future work: some moderator may be inherently biased for one particular political view
+		# and therfore stay silent towards critique of the othe side
+		# also including such moderators may be more convincing for some people
 		
 	def _get_obs(self):
 		return self._polarisation
@@ -113,28 +104,54 @@ class PolarisationEnv(gym.Env):
 		
 	def step(self, action):
 		
+		# calculate rewards
+                _reward = 0
+                for user in range(0,self.n_users):
+                        if action[user] == 0:
+                                _reward += self._right_reward[self._polarisation[user]]
+                        else:
+                                _reward += self._left_reward[self._polarisation[user]]
+                _reward = _reward / (2. * self.n_users)
+		
 		# updating the state, cell by cell
 		for user in range(0,self.n_users):
-			if self._right_polarising_actions[self._polarisation[user]] == 1:
-				if action[user] == 0:
-					self._polarisation[user] = self._polarisation[user] + 1
+			if 0 < self._polarisation[user] < self.n_user_states - 1:
+				if self._right_polarising_actions[self._polarisation[user]] == 1:
+					if action[user] == 0:
+						self._polarisation[user] = self._polarisation[user] + 1
+					else:
+						self._polarisation[user] = self._polarisation[user] - 1
 				else:
-					self._polarisation[user] = self._polarisation[user] - 1
-			else:
-				if action[user] == 0:
-					self._polarisation[user] = self._polarisation[user] - 1 # sign flipped
+					if action[user] == 0:
+						self._polarisation[user] = self._polarisation[user] - 1 # sign flipped
+					else:
+						self._polarisation[user] = self._polarisation[user] + 1 # sign flipped
+			# ensuring that we don't fall off the state space at the edges
+			elif self._polarisation[user] == 0:
+				if self._right_polarising_actions[0] == 1:
+					if action[user] == 0:
+						self._polarisation[user] == 1
+					else:
+						self._polarisation[user] == 0
 				else:
-					self._polarisation[user] = self._polarisation[user] + 1 # sign flipped
-		
-		# calculate rewards
-		_reward = 0
-		for user in range(0,self.n_users):
-			if action[user] == 0:
-				_reward += self._right_reward[self._polarisation[user]]
+					if action[user] == 0:
+                                                self._polarisation[user] == 0
+                                        else:
+                                                self._polarisation[user] == 1
 			else:
-				_reward += self._left_reward[self._polarisation[user]]
-		_reward = _reward / (2. * self.n_users)
+				if self._right_polarising_actions[self.n_user_states - 1] == 1:
+					if action[user] == 0:
+						self._polarisation[user] == self.n_user_states - 1
+					else:
+						self._polarisation[user] == self.n_user_states - 2
+				else:
+					if action[user] == 0:
+                                                self._polarisation[user] == self.n_user_states - 2
+                                        else:
+                                                self._polarisation[user] == self.n_user_states - 1
 
+		
+		
 		# getting side effects (too extreme content) info from moderators
 		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')
 		for moderator in range(0, self.n_users):

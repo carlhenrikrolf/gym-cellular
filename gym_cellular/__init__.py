@@ -8,3 +8,8 @@ register(
 # id, directory, settings
 # for time limit see wrapper documentation
 
+register(
+	id="gym_cellular/Polarisation-v0",
+	entry_point="gym_cellular.envs:PolarisationEnv",
+	max_episode_steps = 300,
+)

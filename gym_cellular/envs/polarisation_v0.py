@@ -27,6 +27,13 @@ class PolarisationEnv(gym.Env):
 		
 		# set additional attributes
 		self.observation_space = spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int)
+		#self.observation_space = spaces.Dict(
+		#	{
+		#		"state": spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int),
+		#		"reward": spaces.Box(0, 1, shape(1,), dtype=np.float32),
+		#		"side_effects": spaces.Box( ... ),
+		#	}
+		#)
 		self.action_space = spaces.MultiDiscrete(np.zeros((n_users), dtype=int) + 2) # 2 intracellular actions
 		self.reward_range = (0, 1)
 		
@@ -36,9 +43,9 @@ class PolarisationEnv(gym.Env):
 		# recommendations given a state that polarise in a right directions indicated by 1
 		# if not right polarising, then left polarising
 		# future work: we might want to be able to change the number of actions as well
-		_right_polarising_recommendations = np.random.rand(n_user_states)
-		_right_polarising_recommendations = np.rint(_right_polarising_recommendations)
-		self._right_polarising_recommendations = _right_polarising_recommendations
+		_right_polarising_actions = np.random.rand(n_user_states)
+		_right_polarising_actions = np.rint(_right_polarising_actions)
+		self._right_polarising_actions = _right_polarising_actions
 		
 		# we can think of a reward function as to whether the user look at the content until the end
 		_right_reward = np.random.rand(n_user_states) # 2 intracellular actions
@@ -53,7 +60,7 @@ class PolarisationEnv(gym.Env):
 		
 		# moderators
 		# initialise the moderator probability function
-		_moderator_probs = np.random.rand(n_users - 1, n_users - 1, n_user_states - 1, n_user_states - 1)
+		_moderator_probs = np.random.rand(n_users, n_users, n_user_states, n_user_states)
 		# picking the set of moderators from the set of users
 		set_of_moderators = np.random.choice(n_users, n_moderators, replace=False)
 		# making the complement such that they are silent
@@ -81,12 +88,20 @@ class PolarisationEnv(gym.Env):
 		# future work: some moderator may be inherently biased for one particular political view
 		# and therfore stay silent towards critique of the othe side
 		# also including such moderators may be more convincing for some people
+		self._moderator_probs = _moderator_probs
+		
+		self._reward = 0
+		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')
+		for moderator in range(0,n_users):
+			for user in range(0,n_users):
+				_side_effects[moderator,user] = "safe"
+		self._side_effects = _side_effects
 		
 	def _get_obs(self):
 		return self._polarisation
 		
 	def _get_info(self):
-		return {"true side effect": False } # fill out	
+		return {"side_effects": self._side_effects}
 		
 	def reset(self, seed=None, options=None):
 		
@@ -110,6 +125,7 @@ class PolarisationEnv(gym.Env):
 			else:
 				_reward += self._left_reward[self._polarisation[user]]
 		_reward = _reward / (1.0 * self.n_users)
+		self._reward = _reward
 		
 		# updating the state, cell by cell
 		for user in range(0,self.n_users):
@@ -162,12 +178,13 @@ class PolarisationEnv(gym.Env):
 						_side_effects[moderator, user] = "unsafe"
 					else:
 						_side_effects[moderator, user] = "silent"
+		self._side_effects = _side_effects
 
 		observation = self._get_obs()
 		reward = _reward
-		side_effects = _side_effects
+		# side_effects = _side_effects
 		terminated = False
 		truncated = False # I need to change this to some kind of time limit
 		info = self._get_info()
 		
-		return observation, reward, side_effects, terminated, truncated, info
+		return observation, reward, terminated, truncated, info

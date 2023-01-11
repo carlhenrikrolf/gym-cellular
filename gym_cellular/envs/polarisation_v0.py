@@ -144,25 +144,25 @@ class PolarisationEnv(gym.Env):
 			elif self._polarisation[user] == 0:
 				if self._right_polarising_actions[0] == 1:
 					if action[user] == 0:
-						self._polarisation[user] == 1
+						self._polarisation[user] = 1
 					else:
-						self._polarisation[user] == 0
+						self._polarisation[user] = 0
 				else:
 					if action[user] == 0:
-						self._polarisation[user] == 0
+						self._polarisation[user] = 0
 					else:
-						self._polarisation[user] == 1
+						self._polarisation[user] = 1
 			else:
 				if self._right_polarising_actions[self.n_user_states - 1] == 1:
 					if action[user] == 0:
-						self._polarisation[user] == self.n_user_states - 1
+						self._polarisation[user] = self.n_user_states - 1
 					else:
-						self._polarisation[user] == self.n_user_states - 2
+						self._polarisation[user] = self.n_user_states - 2
 				else:
 					if action[user] == 0:
-						self._polarisation[user] == self.n_user_states - 2
+						self._polarisation[user] = self.n_user_states - 2
 					else:
-						self._polarisation[user] == self.n_user_states - 1
+						self._polarisation[user] = self.n_user_states - 1
 
 		# getting side effects (too extreme content) reports from moderators
 		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')

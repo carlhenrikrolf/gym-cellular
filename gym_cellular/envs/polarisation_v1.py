@@ -3,13 +3,18 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-class PolarisationEnv(gym.Env):
+class PolarisationV1Env(gym.Env):
 	
 	"""
-	My own environment. Thanks to Luke Thorburn for idea
+	This is version 1 (as opposed to 0).
+	There are two main updates:
+	(1) The state space is expanded with a binary which shows
+	whether is two-way polarisable or one-way polariseable
+	(2) The action space is expanded
 	"""
+	# probably, I should think of the action being the same video in different user states
 	
-	def __init__(self, render_mode=None, n_users=2, n_user_states=8, n_moderators=2, init_seed=1):
+	def __init__(self, render_mode=None, n_users=2, n_user_states=8, n_moderators=2, init_seed=1, n_recommendations = 2):
 		
 		# check inputs to the environment
 		# maybe I could move these to spec?
@@ -18,15 +23,22 @@ class PolarisationEnv(gym.Env):
 		assert type(n_moderators) is int and n_moderators >= 0
 		assert n_moderators <= n_users
 		assert render_mode is None # No rendering for now
+		assert type(n_recommendations) is int and n_recommendations >= 2
 
 		# move inputs to self
 		self.n_users = n_users
 		self.n_user_states = n_user_states
 		self.n_moderators = n_moderators
 		self.init_seed = init_seed
+		self.n_recommendations = n_recommendations
 		
 		# set additional attributes
-		self.observation_space = spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int)
+		self.observation_space = spaces.Dict(
+			{
+				"polarisation": spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int),
+				"two_way_polarisable": spaces.Discrete(2),
+			}
+		)
 		#self.observation_space = spaces.Dict(
 		#	{
 		#		"state": spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int),
@@ -34,7 +46,7 @@ class PolarisationEnv(gym.Env):
 		#		"side_effects": spaces.Box( ... ),
 		#	}
 		#)
-		self.action_space = spaces.MultiDiscrete(np.zeros((n_users), dtype=int) + 2) # 2 intracellular actions
+		self.action_space = spaces.MultiDiscrete(np.zeros((n_users), dtype=int) + n_recommendations) # arbitrary number of intracellular actions
 		self.reward_range = (0, 1)
 		
 		# seed random generator for how the environment is initialised
@@ -43,20 +55,32 @@ class PolarisationEnv(gym.Env):
 		# recommendations given a state that polarise in a right directions indicated by 1
 		# if not right polarising, then left polarising
 		# future work: we might want to be able to change the number of actions as well
-		_right_polarising_actions = np.random.rand(n_user_states)
-		_right_polarising_actions = np.rint(_right_polarising_actions)
-		self._right_polarising_actions = _right_polarising_actions
+		#_right_polarising_actions = np.random.rand(n_user_states)
+		#_right_polarising_actions = np.rint(_right_polarising_actions)
+		#self._right_polarising_actions = _right_polarising_actions
+		_right_polarising_recommendations = np.random.rand(n_recommendations)
+		_right_polarising_recommendations = np.random.rint(_right_polarising_recommendations)
+		self._right_polarising_recommendations = _right_polarising_recommendations # Maybe I want to choose the attractor state for various degrees of polarisation.
+		# for each action, decide a level of polarisation towards which it is attracted
 		
 		# we can think of a reward function as to whether the user look at the content until the end
-		_right_reward = np.random.rand(n_user_states) # 2 intracellular actions
-		self._right_reward = _right_reward
-		_left_reward = np.random.rand(n_user_states)
-		self._left_reward = _left_reward
+		#_right_reward = np.random.rand(n_user_states) # 2 intracellular actions
+		#self._right_reward = _right_reward
+		#_left_reward = np.random.rand(n_user_states)
+		#self._left_reward = _left_reward
+		_intracellular_reward_function = np.random.rand(n_user_states, n_recommendations) # maybe make probabilities higher at the ends
+		# I could add a function f(x) = x^2 - n_user_states / 2 and then normalise to keep them between 0 and 1
+		# note that nothing needs to add up to 1 here
+		# this only concerns the intracellular states and not the intracellular actions
 		
 		# label the states as safe or unsafe
 		# it should be unsafe in the edges and safe
 		self._safe_right_threshold = np.random.randint(1, n_user_states)
 		self._safe_left_threshold = np.random.randint(0, self._safe_right_threshold)
+
+
+		# somewhere, decide a partition where unipolarisable users cannot cross
+
 		
 		# moderators
 		# initialise the moderator probability function
@@ -90,15 +114,8 @@ class PolarisationEnv(gym.Env):
 		# also including such moderators may be more convincing for some people
 		self._moderator_probs = _moderator_probs
 		
-		self._reward = 0
-		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')
-		for moderator in range(0,n_users):
-			for user in range(0,n_users):
-				_side_effects[moderator,user] = "safe"
-		self._side_effects = _side_effects
-		
 	def _get_obs(self):
-		return self._polarisation
+		return {"polarisation": self._polarisation, "two_way_polarisable": 0}
 	
 	def _get_side_effects(self):
 		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')
@@ -147,7 +164,7 @@ class PolarisationEnv(gym.Env):
 		for user in range(0,self.n_users):
 			if 0 < self._polarisation[user] < self.n_user_states - 1:
 				if self._right_polarising_actions[self._polarisation[user]] == 1:
-					if action[user] == 0:
+					if action[user] == 0: # change to if the action is left of its set point, then go right, o.w. go left
 						self._polarisation[user] = self._polarisation[user] + 1
 					else:
 						self._polarisation[user] = self._polarisation[user] - 1
@@ -179,6 +196,7 @@ class PolarisationEnv(gym.Env):
 						self._polarisation[user] = self.n_user_states - 2
 					else:
 						self._polarisation[user] = self.n_user_states - 1
+		# I also need to implement a place where that partition is
 
 		# getting side effects (too extreme content) reports from moderators
 		# self._side_effects = self._get_side_effects()

@@ -14,7 +14,7 @@ import numpy as np
 
 # settings
 n_time_steps = 5
-env = gym.make('gym_cellular/Polarisation-v0',
+env = gym.make('gym_cellular/Polarisation-v1',
 	n_users = 4,
 	n_user_states=8,
 	n_moderators=1,

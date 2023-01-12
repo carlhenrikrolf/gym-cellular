@@ -1,3 +1,4 @@
+from sqlite3 import enable_shared_cache
 import numpy as np
 
 import gymnasium as gym
@@ -58,20 +59,24 @@ class PolarisationV1Env(gym.Env):
 		#_right_polarising_actions = np.random.rand(n_user_states)
 		#_right_polarising_actions = np.rint(_right_polarising_actions)
 		#self._right_polarising_actions = _right_polarising_actions
-		_right_polarising_recommendations = np.random.rand(n_recommendations)
-		_right_polarising_recommendations = np.random.rint(_right_polarising_recommendations)
-		self._right_polarising_recommendations = _right_polarising_recommendations # Maybe I want to choose the attractor state for various degrees of polarisation.
+		#_right_polarising_recommendations = np.random.rand(n_recommendations)
+		#_right_polarising_recommendations = np.random.rint(_right_polarising_recommendations)
+		#self._right_polarising_recommendations = _right_polarising_recommendations # Maybe I want to choose the attractor state for various degrees of polarisation.
+
 		# for each action, decide a level of polarisation towards which it is attracted
+		self._attractor_state = np.random.randint(0, n_user_states, size=n_recommendations, dtype=int)
 		
 		# we can think of a reward function as to whether the user look at the content until the end
 		#_right_reward = np.random.rand(n_user_states) # 2 intracellular actions
 		#self._right_reward = _right_reward
 		#_left_reward = np.random.rand(n_user_states)
 		#self._left_reward = _left_reward
-		_intracellular_reward_function = np.random.rand(n_user_states, n_recommendations) # maybe make probabilities higher at the ends
-		# I could add a function f(x) = x^2 - n_user_states / 2 and then normalise to keep them between 0 and 1
-		# note that nothing needs to add up to 1 here
-		# this only concerns the intracellular states and not the intracellular actions
+		_parabola = lambda x: (2. / n_user_states)**2 * (x - n_user_states / 2.)**2 
+		_intracellular_reward_function = np.random.rand(n_user_states, n_recommendations)
+		for user_state in n_user_states:
+			_intracellular_reward_function[user_state, :] = _intracellular_reward_function[user_state, :] + 2 * _parabola(user_state)
+		_intracellular_reward_function = _intracellular_reward_function / 3
+		self._intracellular_reward_function = _intracellular_reward_function
 		
 		# label the states as safe or unsafe
 		# it should be unsafe in the edges and safe
@@ -80,7 +85,7 @@ class PolarisationV1Env(gym.Env):
 
 
 		# somewhere, decide a partition where unipolarisable users cannot cross
-
+		self._right_left_split = np.random.rand(0, n_user_states)
 		
 		# moderators
 		# initialise the moderator probability function
@@ -115,31 +120,37 @@ class PolarisationV1Env(gym.Env):
 		self._moderator_probs = _moderator_probs
 		
 	def _get_obs(self):
-		return {"polarisation": self._polarisation, "two_way_polarisable": 0}
+		return {"polarisation": self._polarisation, "two_way_polarisable": self._two_way_polarisable}
 	
 	def _get_side_effects(self):
+
 		_side_effects = np.zeros((self.n_users, self.n_users), dtype='<U6')
-		for moderator in range(0, self.n_users):
-			for user in range(0, self.n_users):
-				if self._safe_left_threshold <= self._polarisation[user] <= self._safe_right_threshold:
+		_side_effects_incidence = 0
+		for user in range(0, self.n_users):
+			if self._safe_left_threshold <= self._polarisation[user] <= self._safe_right_threshold:
+				for moderator in range(0, self.n_users):
 					if self._moderator_probs[moderator, user, self._polarisation[moderator], self._polarisation[user]] > np.random.rand(1): # by de>
 						_side_effects[moderator, user] = "safe"
 					else:
 						_side_effects[moderator, user] = "silent"
-				else:
+			else:
+				_side_effects_incidence = _side_effects_incidence + 1 # the true safety violation
+				for moderator in range(0, self.n_users):
 					if self._moderator_probs[moderator, user, self._polarisation[moderator], self._polarisation[user]] > np.random.rand(1):
 						_side_effects[moderator, user] = "unsafe"
 					else:
 						_side_effects[moderator, user] = "silent"
-		return _side_effects
+		return _side_effects, _side_effects_incidence
 		
 	def _get_info(self):
-		return {"side_effects": self._get_side_effects()}
+		_side_effects, _side_effects_incidence = self._get_side_effects()
+		return {"side_effects": _side_effects, "side_effects_incidence": _side_effects_incidence}
 		
 	def reset(self, seed=None, options=None):
 		
 		# ensure that the initial state is safe
 		self._polarisation = self.np_random.integers(self._safe_left_threshold, self._safe_right_threshold + 1, size=self.n_users, dtype=int) # if it works like np.random.randint
+		self._two_way_polarisable = np.random.randint(0, 1, size=self.n_users)
 		
 		observation = self._get_obs()
 		info = self._get_info()
@@ -153,50 +164,104 @@ class PolarisationV1Env(gym.Env):
 		# calculate rewards
 		_reward = 0
 		for user in range(0, self.n_users):
-			if action[user] == 0:
-				_reward += self._right_reward[self._polarisation[user]]
-			else:
-				_reward += self._left_reward[self._polarisation[user]]
-		_reward = _reward / (1.0 * self.n_users)
+			for recommendation in range(0, self.n_recommendations):
+				_reward = _reward + self._intracellular_reward[user, recommendation]
+		_reward = _reward / (self.n_users * self.n_recommendations)
+		if _reward <= 0.2:
+			_reward = 0
 		self._reward = _reward
-		
-		# updating the state, cell by cell
+
+		# updating the state, cell by cell, updated
 		for user in range(0,self.n_users):
 			if 0 < self._polarisation[user] < self.n_user_states - 1:
-				if self._right_polarising_actions[self._polarisation[user]] == 1:
-					if action[user] == 0: # change to if the action is left of its set point, then go right, o.w. go left
+				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user]:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user]
+					else:
+						self._polarisation[user] = self._polarisation[user] - 1
+				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user] + 1:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user] + 1
+					else:
+						self._polarisation[user] = self._polarisation[user]
+				else:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user] + 1
 					else:
 						self._polarisation[user] = self._polarisation[user] - 1
-				else:
-					if action[user] == 0:
-						self._polarisation[user] = self._polarisation[user] - 1 # sign flipped
-					else:
-						self._polarisation[user] = self._polarisation[user] + 1 # sign flipped
 			# ensuring that we don't fall off the state space at the edges
 			elif self._polarisation[user] == 0:
-				if self._right_polarising_actions[0] == 1:
-					if action[user] == 0:
-						self._polarisation[user] = 1
+				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user]:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user]
 					else:
-						self._polarisation[user] = 0
+						self._polarisation[user] = self._polarisation[user]
+				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user] + 1:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user] + 1
+					else:
+						self._polarisation[user] = self._polarisation[user]
 				else:
-					if action[user] == 0:
-						self._polarisation[user] = 0
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user] + 1
 					else:
-						self._polarisation[user] = 1
+						self._polarisation[user] = self._polarisation[user]
 			else:
-				if self._right_polarising_actions[self.n_user_states - 1] == 1:
-					if action[user] == 0:
-						self._polarisation[user] = self.n_user_states - 1
+				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user]:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user]
 					else:
-						self._polarisation[user] = self.n_user_states - 2
+						self._polarisation[user] = self._polarisation[user] - 1
+				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user] + 1:
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user]
+					else:
+						self._polarisation[user] = self._polarisation[user]
 				else:
-					if action[user] == 0:
-						self._polarisation[user] = self.n_user_states - 2
+					if self._polarisation[user] < self._attractor_state[action[user]]:
+						self._polarisation[user] = self._polarisation[user]
 					else:
-						self._polarisation[user] = self.n_user_states - 1
-		# I also need to implement a place where that partition is
+						self._polarisation[user] = self._polarisation[user] - 1				
+			
+		
+		
+		# # updating the state, cell by cell
+		# for user in range(0,self.n_users):
+		# 	if 0 < self._polarisation[user] < self.n_user_states - 1:
+		# 		if self._right_polarising_actions[self._polarisation[user]] == 1:
+		# 			if action[user] == 0: # change to if the action is left of its set point, then go right, o.w. go left
+		# 				self._polarisation[user] = self._polarisation[user] + 1
+		# 			else:
+		# 				self._polarisation[user] = self._polarisation[user] - 1
+		# 		else:
+		# 			if action[user] == 0:
+		# 				self._polarisation[user] = self._polarisation[user] - 1 # sign flipped
+		# 			else:
+		# 				self._polarisation[user] = self._polarisation[user] + 1 # sign flipped
+		# 	# ensuring that we don't fall off the state space at the edges
+		# 	elif self._polarisation[user] == 0:
+		# 		if self._right_polarising_actions[0] == 1:
+		# 			if action[user] == 0:
+		# 				self._polarisation[user] = 1
+		# 			else:
+		# 				self._polarisation[user] = 0
+		# 		else:
+		# 			if action[user] == 0:
+		# 				self._polarisation[user] = 0
+		# 			else:
+		# 				self._polarisation[user] = 1
+		# 	else:
+		# 		if self._right_polarising_actions[self.n_user_states - 1] == 1:
+		# 			if action[user] == 0:
+		# 				self._polarisation[user] = self.n_user_states - 1
+		# 			else:
+		# 				self._polarisation[user] = self.n_user_states - 2
+		# 		else:
+		# 			if action[user] == 0:
+		# 				self._polarisation[user] = self.n_user_states - 2
+		# 			else:
+		# 				self._polarisation[user] = self.n_user_states - 1
+		# # I also need to implement a place where that partition is
 
 		# getting side effects (too extreme content) reports from moderators
 		# self._side_effects = self._get_side_effects()

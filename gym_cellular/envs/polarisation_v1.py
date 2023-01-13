@@ -143,7 +143,8 @@ class PolarisationV1Env(gym.Env):
 		
 	def _get_info(self):
 		_side_effects, _side_effects_incidence = self._get_side_effects()
-		return {"side_effects": _side_effects, "side_effects_incidence": _side_effects_incidence}
+		_env_params = {"right_left_split": self._right_left_split}
+		return {"side_effects": _side_effects, "side_effects_incidence": _side_effects_incidence, "environment_parameters": _env_params}
 		
 	def reset(self, seed=None, options=None):
 		

@@ -17,19 +17,35 @@ import numpy as np
 
 # settings
 version = 'gym_cellular/Polarisation-v1'
-n_time_steps = 5
+assert version == 'gym_cellular/Polarisation-v1'
+_n_user_states = 4
+_n_recommendations = 3
+n_time_steps = 20
 env = gym.make(version,
-	n_users = 4,
-	n_user_states=8,
+	n_users = 2,
+	n_user_states=_n_user_states,
 	n_moderators=1,
-	init_seed=None
+	init_seed=None,
+	n_recommendations=_n_recommendations
 )
 
-print("START RUN")
+
 observation, info = env.reset()
+
+print("PARAMETERS")
+parameters = info["environment_parameters"]
+print("number of time steps:", n_time_steps)
+print("degrees of polarisation", _n_user_states)
+print("number of recommendations:", _n_recommendations)
+print("right left split:", parameters["right_left_split"])
+print("\n")
+
+print("START RUN")
 print("initial state:", observation)
 print("initial side effects:\n", info["side_effects"])
 print( "\n")
+
+#action = env.action_space.sample()
 
 for _ in range(0,n_time_steps - 1):
 	previous_polarisation = np.copy(observation["polarisation"])
@@ -42,8 +58,7 @@ for _ in range(0,n_time_steps - 1):
 	print("current state: ", observation["polarisation"])
 	print("reward:        ", reward)
 	print("side effects:\n", info["side_effects"])
-	if version == 'gym_cellular/Polarisation-v1':
-		print("side effects incidence:", info["side_effects_incidence"])
+	print("side effects incidence:", info["side_effects_incidence"])
 	print("\n")
 
 print("%%%%%%%%%%%%%%")

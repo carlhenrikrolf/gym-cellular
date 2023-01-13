@@ -1,4 +1,3 @@
-from sqlite3 import enable_shared_cache
 import numpy as np
 
 import gymnasium as gym
@@ -21,8 +20,7 @@ class PolarisationV1Env(gym.Env):
 		# maybe I could move these to spec?
 		assert type(n_users) is int and n_users >= 1
 		assert type(n_user_states) is int and n_user_states >= 2
-		assert type(n_moderators) is int and n_moderators >= 0
-		assert n_moderators <= n_users
+		assert type(n_moderators) is int and 0 <= n_moderators <= n_users
 		assert render_mode is None # No rendering for now
 		assert type(n_recommendations) is int and n_recommendations >= 2
 
@@ -37,7 +35,7 @@ class PolarisationV1Env(gym.Env):
 		self.observation_space = spaces.Dict(
 			{
 				"polarisation": spaces.Box(0, n_user_states - 1, shape=(n_users,), dtype=int),
-				"two_way_polarisable": spaces.Discrete(2),
+				"two_way_polarisable": spaces.MultiDiscrete(np.zeros(n_users, dtype=int) + 2),
 			}
 		)
 		#self.observation_space = spaces.Dict(
@@ -71,9 +69,9 @@ class PolarisationV1Env(gym.Env):
 		#self._right_reward = _right_reward
 		#_left_reward = np.random.rand(n_user_states)
 		#self._left_reward = _left_reward
-		_parabola = lambda x: (2. / n_user_states)**2 * (x - n_user_states / 2.)**2 
+		_parabola = lambda x: (2. / n_user_states)**2 * (x - n_user_states / 2.)**2
 		_intracellular_reward_function = np.random.rand(n_user_states, n_recommendations)
-		for user_state in n_user_states:
+		for user_state in range(0, n_user_states):
 			_intracellular_reward_function[user_state, :] = _intracellular_reward_function[user_state, :] + 2 * _parabola(user_state)
 		_intracellular_reward_function = _intracellular_reward_function / 3
 		self._intracellular_reward_function = _intracellular_reward_function
@@ -85,7 +83,7 @@ class PolarisationV1Env(gym.Env):
 
 
 		# somewhere, decide a partition where unipolarisable users cannot cross
-		self._right_left_split = np.random.rand(0, n_user_states)
+		self._right_left_split = np.random.randint(self._safe_left_threshold - 1, self._safe_right_threshold + 1)
 		
 		# moderators
 		# initialise the moderator probability function
@@ -140,6 +138,7 @@ class PolarisationV1Env(gym.Env):
 						_side_effects[moderator, user] = "unsafe"
 					else:
 						_side_effects[moderator, user] = "silent"
+		_side_effects_incidence = _side_effects_incidence / self.n_users
 		return _side_effects, _side_effects_incidence
 		
 	def _get_info(self):
@@ -150,7 +149,7 @@ class PolarisationV1Env(gym.Env):
 		
 		# ensure that the initial state is safe
 		self._polarisation = self.np_random.integers(self._safe_left_threshold, self._safe_right_threshold + 1, size=self.n_users, dtype=int) # if it works like np.random.randint
-		self._two_way_polarisable = np.random.randint(0, 1, size=self.n_users)
+		self._two_way_polarisable = self.np_random.integers(0, 2, size=self.n_users, dtype=int)
 		
 		observation = self._get_obs()
 		info = self._get_info()
@@ -165,7 +164,7 @@ class PolarisationV1Env(gym.Env):
 		_reward = 0
 		for user in range(0, self.n_users):
 			for recommendation in range(0, self.n_recommendations):
-				_reward = _reward + self._intracellular_reward[user, recommendation]
+				_reward = _reward + self._intracellular_reward_function[self._polarisation[user], recommendation]
 		_reward = _reward / (self.n_users * self.n_recommendations)
 		if _reward <= 0.2:
 			_reward = 0
@@ -174,12 +173,12 @@ class PolarisationV1Env(gym.Env):
 		# updating the state, cell by cell, updated
 		for user in range(0,self.n_users):
 			if 0 < self._polarisation[user] < self.n_user_states - 1:
-				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user]:
+				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split:
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user]
 					else:
 						self._polarisation[user] = self._polarisation[user] - 1
-				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user] + 1:
+				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split + 1:
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user] + 1
 					else:
@@ -191,12 +190,12 @@ class PolarisationV1Env(gym.Env):
 						self._polarisation[user] = self._polarisation[user] - 1
 			# ensuring that we don't fall off the state space at the edges
 			elif self._polarisation[user] == 0:
-				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user]:
+				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split:
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user]
 					else:
 						self._polarisation[user] = self._polarisation[user]
-				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user] + 1:
+				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split + 1:
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user] + 1
 					else:
@@ -207,12 +206,12 @@ class PolarisationV1Env(gym.Env):
 					else:
 						self._polarisation[user] = self._polarisation[user]
 			else:
-				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user]:
+				if self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split:
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user]
 					else:
 						self._polarisation[user] = self._polarisation[user] - 1
-				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split[user] + 1:
+				elif self._two_way_polarisable[user] == 0 and self._polarisation[user] == self._right_left_split + 1:
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user]
 					else:
@@ -221,8 +220,8 @@ class PolarisationV1Env(gym.Env):
 					if self._polarisation[user] < self._attractor_state[action[user]]:
 						self._polarisation[user] = self._polarisation[user]
 					else:
-						self._polarisation[user] = self._polarisation[user] - 1				
-			
+						self._polarisation[user] = self._polarisation[user] - 1
+		
 		
 		
 		# # updating the state, cell by cell
@@ -267,7 +266,7 @@ class PolarisationV1Env(gym.Env):
 		# self._side_effects = self._get_side_effects()
 
 		observation = self._get_obs()
-		reward = _reward
+		reward = self._reward
 		# side_effects = _side_effects
 		terminated = False
 		truncated = False # I need to change this to some kind of time limit

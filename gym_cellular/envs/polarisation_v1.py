@@ -30,6 +30,12 @@ class PolarisationV1Env(gym.Env):
 		self.n_moderators = n_moderators
 		self.init_seed = init_seed
 		self.n_recommendations = n_recommendations
+
+		# variables for AlwaysSafe
+		self.nS = (n_user_states * 2) ** n_users
+		self.isd = np.zeros(self.nS) # more support than necessary, so not really correct
+		self.nA = n_recommendations ** n_users
+		self.P = {s: {a: [] for a in range(self.nA)} for s in range(self.nS)}
 		
 		# set additional attributes
 		self.observation_space = spaces.Dict(
@@ -274,3 +280,47 @@ class PolarisationV1Env(gym.Env):
 		info = self._get_info()
 		
 		return observation, reward, terminated, truncated, info
+
+	def integerify_observation(self, observation=None):
+		
+		# unpack observation
+		if observation != None:
+			polarisation = observation['polarisation']
+			two_way_polarisable = observation['two_way_polarisable']
+		else:
+			polarisation = self._polarisation
+			two_way_polarisable = self._two_way_polarisable
+		
+		# form binary list
+		user_state_bit_length = self.n_user_states - 1
+		user_state_bit_length = user_state_bit_length.bit_length()
+		bin_array = np.zeros((user_state_bit_length + 1, self.n_users), dtype=int)
+		for user in range(self.n_users):
+			bin_str = bin(polarisation[user])[2:]
+			start_bit = user_state_bit_length - len(bin_str)
+			for bit in range(start_bit, user_state_bit_length):
+				bin_array[bit, user] = bin_str[bit - start_bit]
+			bin_array[user_state_bit_length, user] = two_way_polarisable[user]
+		bin_list = np.ravel(bin_array)
+		
+		# turn list into integer
+		integer = np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size))
+		
+		return integer
+
+	def vectorify_action(self, action):
+		
+		recommendation_bit_length = self.n_recommendations - 1
+		recommendation_bit_length = recommendation_bit_length.bit_length()
+		end_bit = self.n_users * recommendation_bit_length
+		bin_list = np.zeros(end_bit, dtype=int)
+		bin_str = bin(action)[2:]
+		start_bit = end_bit - len(bin_str)
+		for bit in range(start_bit, end_bit):
+			bin_list[bit] = bin_str[bit - start_bit]
+		bin_array = bin_list.reshape(self.n_users, recommendation_bit_length)
+		vector = np.zeros(self.n_users, dtype=int)
+		for user in range(self.n_users):
+			bin_str_2 = ''.join(str(i) for i in bin_array[user, :])
+			vector[user] = int(bin_str, 2)
+		return vector

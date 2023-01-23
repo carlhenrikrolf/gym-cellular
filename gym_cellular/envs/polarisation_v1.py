@@ -282,6 +282,13 @@ class PolarisationV1Env(gym.Env):
 		return observation, reward, terminated, truncated, info
 
 	def integerify_observation(self, observation=None):
+
+		"""
+		Turns an observation (in the form of a dictionary) into a single integer.
+		If not specified, the observation is the most recent observation.
+		An arbitrary observation can also be specified,
+		and in that case, the current observation is ignored.
+		"""
 		
 		# unpack observation
 		if observation != None:
@@ -309,7 +316,12 @@ class PolarisationV1Env(gym.Env):
 		return integer
 
 	def vectorify_action(self, action):
+
+		"""
+		Turns an action in the form of an integer into a vector of integers.
+		"""
 		
+		# form binary array
 		recommendation_bit_length = self.n_recommendations - 1
 		recommendation_bit_length = recommendation_bit_length.bit_length()
 		end_bit = self.n_users * recommendation_bit_length
@@ -320,7 +332,9 @@ class PolarisationV1Env(gym.Env):
 			bin_list[bit] = bin_str[bit - start_bit]
 		bin_array = bin_list.reshape(self.n_users, recommendation_bit_length)
 		vector = np.zeros(self.n_users, dtype=int)
+
+		# turn binary array into integer list (vector)
 		for user in range(self.n_users):
-			bin_str_2 = ''.join(str(i) for i in bin_array[user, :])
-			vector[user] = int(bin_str, 2)
+			for bit in range(recommendation_bit_length):
+				vector[user] = np.dot(np.flip(bin_array[user, bit]), 2 ** np.arange(recommendation_bit_length))
 		return vector

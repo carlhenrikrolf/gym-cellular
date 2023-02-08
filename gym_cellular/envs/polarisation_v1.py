@@ -281,6 +281,31 @@ class PolarisationV1Env(gym.Env):
 		
 		return observation, reward, terminated, truncated, info
 
+	def cellular_encoding(self, observation):
+
+
+		polarisation = observation['polarisation']
+		two_way_polarisable = observation['two_way_polarisable']
+
+
+		# form binary array
+		user_state_bit_length = self.n_user_states - 1
+		user_state_bit_length = user_state_bit_length.bit_length()
+		bin_array = np.zeros((user_state_bit_length + 1, self.n_users), dtype=int)
+		int_list = np.zeros(self.n_users, dtype=int)
+		for user in range(self.n_users):
+			bin_str = bin(polarisation[user])[2:]
+			start_bit = user_state_bit_length - len(bin_str)
+			for bit in range(start_bit, user_state_bit_length):
+				bin_array[bit, user] = bin_str[bit - start_bit]
+			bin_array[user_state_bit_length, user] = two_way_polarisable[user]
+			int_list[user] = int(np.dot(np.flip(bin_array[user]), 2 ** np.arange(bin_array[user].size)))
+		return int_list
+
+	def cellular_decoding(self, action):
+		
+		return action
+
 	def integerify_observation(self, observation=None):
 
 		"""

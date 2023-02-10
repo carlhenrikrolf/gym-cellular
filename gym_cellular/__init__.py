@@ -19,3 +19,9 @@ register(
 	entry_point="gym_cellular.envs:PolarisationV1Env",
 	max_episode_steps=300,
 )
+
+register(
+	id="gym_cellular/Polarisation-v2",
+	entry_point="gym_cellular.envs:PolarisationV2Env",
+	max_episode_steps=300,
+)

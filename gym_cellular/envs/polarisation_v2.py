@@ -1,10 +1,11 @@
+import math
 import numpy as np
 from copy import deepcopy
 
 import gymnasium as gym
 from gymnasium import spaces
 
-class PolarisationV1Env(gym.Env):
+class PolarisationV2Env(gym.Env):
 	
 	"""
 	This is version 1 (as opposed to 0).
@@ -15,7 +16,7 @@ class PolarisationV1Env(gym.Env):
 	"""
 	# probably, I should think of the action being the same video in different user states
 	
-	def __init__(self, render_mode=None, n_users=2, n_user_states=8, n_moderators=2, init_seed=1, n_recommendations = 2):
+	def __init__(self, render_mode=None, n_users=2, n_user_states=8, n_moderators=2, seed=1, n_recommendations = 2):
 		
 		# check inputs to the environment
 		assert type(n_users) is int and n_users >= 1
@@ -28,14 +29,12 @@ class PolarisationV1Env(gym.Env):
 		self.n_users = n_users
 		self.n_user_states = n_user_states
 		self.n_moderators = n_moderators
-		self.init_seed = init_seed
+		self.seed = seed
 		self.n_recommendations = n_recommendations
 
 		# variables for AlwaysSafe
-		self.nS = (n_user_states * 2) ** n_users # deprecation warning
-		self.isd = np.zeros(self.nS) # more support than necessary, so not really correct # deprecation warning
-		self.nA = n_recommendations ** n_users # deprecation warning
-		self.P = {s: {a: [] for a in range(self.nA)} for s in range(self.nS)} # deprecation warning
+		self.n_states = (self.n_user_states * 2) ** self.n_users
+		self.n_actions = n_recommendations ** n_users 
 		
 		# set additional attributes
 		self.observation_space = spaces.Dict(
@@ -48,16 +47,13 @@ class PolarisationV1Env(gym.Env):
 		self.reward_range = (0, 1)
 		
 		# seed random generator for how the environment is initialised
-		np.random.seed(seed=init_seed) # rename into seed?
+		np.random.seed(seed=self.seed)
 
 		# for each action, decide a level of polarisation towards which it is attracted
 		self._attractor_state = np.random.randint(0, n_user_states, size=n_recommendations, dtype=int)
 		
 		# we can think of a reward function as to whether the user look at the content until the end
-		#_right_reward = np.random.rand(n_user_states) # 2 intracellular actions
-		#self._right_reward = _right_reward
-		#_left_reward = np.random.rand(n_user_states)
-		#self._left_reward = _left_reward
+		# the reward gets higher for the edge cases
 		_parabola = lambda x: (2. / n_user_states)**2 * (x - n_user_states / 2.)**2
 		_intracellular_reward_function = np.random.rand(n_user_states, n_recommendations)
 		for user_state in range(0, n_user_states):
@@ -105,6 +101,9 @@ class PolarisationV1Env(gym.Env):
 		# and therfore stay silent towards critique of the othe side
 		# also including such moderators may be more convincing for some people
 		self._moderator_probs = _moderator_probs
+
+	def get_initial_policy(self):
+		return np.zeros((self.n_users, self.n_states), dtype=int)
 		
 	def _get_obs(self):
 		return {"polarisation": self._polarisation, "two_way_polarisable": self._two_way_polarisable}
@@ -131,9 +130,8 @@ class PolarisationV1Env(gym.Env):
 		return _side_effects, _side_effects_incidence
 		
 	def _get_info(self):
-		_side_effects, _side_effects_incidence = self._get_side_effects()
-		_env_params = {"right_left_split": self._right_left_split}
-		return {"side_effects": _side_effects, "side_effects_incidence": _side_effects_incidence, "environment_parameters": _env_params}
+		_side_effects, _ = self._get_side_effects()
+		return {"side_effects": _side_effects}
 		
 	def reset(self, seed=None, options=None):
 		
@@ -147,32 +145,9 @@ class PolarisationV1Env(gym.Env):
 		return observation, info
 		
 	# future work: generate safe policy somehow
-
-	def reward_function(self, observation, action):
-		polarisation = deepcopy(observation['polarisation'])
-		reward = 0
-		for user in range(self.n_users):
-			reward += self._intracellular_reward_function[polarisation[user], action[user]]
-		reward = reward / (self.n_users * self.n_recommendations)
-		if reward <= 0.2:
-			reward = 0
-		return reward
-
-
-	def tabular_reward_function(self, tabular_observation, tabular_action):
-		pass
-
 		
 	def step(self, action):
-		
-		# calculate rewards
-		#_reward = 0
-		#for user in range(0, self.n_users):
-		#	for recommendation in range(0, self.n_recommendations):
-		#		_reward = _reward + self._intracellular_reward_function[self._polarisation[user], recommendation]
-		#_reward = _reward / (self.n_users * self.n_recommendations)
-		#if _reward <= 0.2:
-		#	_reward = 0
+
 		self._reward = self.reward_function(self._get_obs(), action)
 
 		# updating the state, cell by cell, updated
@@ -226,49 +201,6 @@ class PolarisationV1Env(gym.Env):
 						self._polarisation[user] = self._polarisation[user]
 					else:
 						self._polarisation[user] = self._polarisation[user] - 1
-		
-		
-		
-		# # updating the state, cell by cell
-		# for user in range(0,self.n_users):
-		# 	if 0 < self._polarisation[user] < self.n_user_states - 1:
-		# 		if self._right_polarising_actions[self._polarisation[user]] == 1:
-		# 			if action[user] == 0: # change to if the action is left of its set point, then go right, o.w. go left
-		# 				self._polarisation[user] = self._polarisation[user] + 1
-		# 			else:
-		# 				self._polarisation[user] = self._polarisation[user] - 1
-		# 		else:
-		# 			if action[user] == 0:
-		# 				self._polarisation[user] = self._polarisation[user] - 1 # sign flipped
-		# 			else:
-		# 				self._polarisation[user] = self._polarisation[user] + 1 # sign flipped
-		# 	# ensuring that we don't fall off the state space at the edges
-		# 	elif self._polarisation[user] == 0:
-		# 		if self._right_polarising_actions[0] == 1:
-		# 			if action[user] == 0:
-		# 				self._polarisation[user] = 1
-		# 			else:
-		# 				self._polarisation[user] = 0
-		# 		else:
-		# 			if action[user] == 0:
-		# 				self._polarisation[user] = 0
-		# 			else:
-		# 				self._polarisation[user] = 1
-		# 	else:
-		# 		if self._right_polarising_actions[self.n_user_states - 1] == 1:
-		# 			if action[user] == 0:
-		# 				self._polarisation[user] = self.n_user_states - 1
-		# 			else:
-		# 				self._polarisation[user] = self.n_user_states - 2
-		# 		else:
-		# 			if action[user] == 0:
-		# 				self._polarisation[user] = self.n_user_states - 2
-		# 			else:
-		# 				self._polarisation[user] = self.n_user_states - 1
-		# # I also need to implement a place where that partition is
-
-		# getting side effects (too extreme content) reports from moderators
-		# self._side_effects = self._get_side_effects()
 
 		observation = self._get_obs()
 		reward = self._reward
@@ -279,6 +211,20 @@ class PolarisationV1Env(gym.Env):
 		
 		return observation, reward, terminated, truncated, info
 
+	def _new_bin_enc(self, observation):
+
+		polarisation = observation['polarisation']
+		two_way_polarisable = np.reshape(observation['two_way_polarisable'], (self.n_users, 1))
+		#intracellular_state_bit_length = polarisation_bit_length + 1
+		polarisation_bit_length = math.ceil(np.log2(self.n_user_states))
+		bin_polarisation_array = np.zeros((self.n_users, polarisation_bit_length), dtype=int)
+		for user in range(self.n_users):
+			bin_str = bin(polarisation[user])[2:]
+			start_bit = polarisation_bit_length - len(bin_str)
+			for bit in range(start_bit, polarisation_bit_length):
+				bin_polarisation_array[user, bit] = bin_str[bit - start_bit]
+		return np.concatenate((bin_polarisation_array, two_way_polarisable), axis=1)
+
 
 	def _binary_encoding(self, observation):
 
@@ -287,8 +233,7 @@ class PolarisationV1Env(gym.Env):
 		two_way_polarisable = observation['two_way_polarisable']
 
 		# form binary array
-		user_state_bit_length = self.n_user_states - 1
-		user_state_bit_length = user_state_bit_length.bit_length()
+		user_state_bit_length = math.ceil(np.log2(self.n_user_states))
 		bin_array = np.zeros((user_state_bit_length + 1, self.n_users), dtype=int)
 		for user in range(self.n_users):
 			bin_str = bin(polarisation[user])[2:]
@@ -302,11 +247,12 @@ class PolarisationV1Env(gym.Env):
 
 	def cellular_encoding(self, observation):
 
-		bin_array = self._binary_encoding(observation)
+		bin_array = self._new_bin_enc(observation)
 		int_list = np.zeros(self.n_users, dtype=int)
 		for user in range(self.n_users):
-			int_list[user] = int(np.dot(np.flip(bin_array[user]), 2 ** np.arange(bin_array[user].size)))
+			int_list[user] = int(np.dot(np.flip(bin_array[user,:]), 2 ** np.arange(bin_array[user,:].size)))
 		return int_list
+
 
 	def cellular_decoding(self, action):
 		
@@ -315,47 +261,37 @@ class PolarisationV1Env(gym.Env):
 	
 	def tabular_encoding(self, observation):
 		
-		bin_array = self._binary_encoding(observation)
+		bin_array = self._new_bin_enc(observation)
 		bin_list = np.reshape(bin_array, np.prod(np.shape(bin_array)))
 		integer = int(np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size)))
 		return integer
 
+	
+	def _inverse_tabular_encoding(self, tabular_observation):
 
-	def integerify_observation(self, observation=None):
+		assert type(tabular_observation) is int
+		assert 0 <= tabular_observation < self.n_states
 
-		"""
-		Turns an observation (in the form of a dictionary) into a single integer.
-		If not specified, the observation is the most recent observation.
-		An arbitrary observation can also be specified,
-		and in that case, the current observation is ignored.
-		"""
-		
-		# unpack observation
-		if observation != None:
-			polarisation = observation['polarisation']
-			two_way_polarisable = observation['two_way_polarisable']
-		else:
-			polarisation = self._polarisation
-			two_way_polarisable = self._two_way_polarisable
-		
-		# form binary list
-		user_state_bit_length = self.n_user_states - 1
-		user_state_bit_length = user_state_bit_length.bit_length()
-		bin_array = np.zeros((user_state_bit_length + 1, self.n_users), dtype=int)
+		binary = bin(tabular_observation)[2:]
+		bit_length = (self.n_user_states**self.n_users - 1).bit_length() + self.n_users
+		bin_list = np.zeros(bit_length)
+		start_bit = bit_length - len(binary)
+		for bit in range(start_bit, bit_length):
+			bin_list[bit] = int(binary[bit - start_bit])
+		bin_array = np.reshape(bin_list, (self.n_users, int(bit_length / self.n_users)))
+
+		two_way_polarisable = np.array(bin_array[:, -1], dtype=int)
+
+		polarisation = np.zeros(self.n_users, dtype=int)
 		for user in range(self.n_users):
-			bin_str = bin(polarisation[user])[2:]
-			start_bit = user_state_bit_length - len(bin_str)
-			for bit in range(start_bit, user_state_bit_length):
-				bin_array[bit, user] = bin_str[bit - start_bit]
-			bin_array[user_state_bit_length, user] = two_way_polarisable[user]
-		bin_list = np.ravel(bin_array)
-		
-		# turn list into integer
-		integer = np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size))
-		
-		return integer
+			polarisation[user] = np.dot(np.flip(bin_array[user, :-1]), 2 ** np.arange(bin_array[user, :-1].size))
 
-	def vectorify_action(self, action):
+		observation = {"polarisation": polarisation, "two_way_polarisable": two_way_polarisable}
+
+		return observation
+
+
+	def tabular_decoding(self, action):
 
 		"""
 		Turns an action in the form of an integer into a vector of integers.
@@ -377,4 +313,50 @@ class PolarisationV1Env(gym.Env):
 		for user in range(self.n_users):
 			for bit in range(recommendation_bit_length):
 				vector[user] = np.dot(np.flip(bin_array[user, bit]), 2 ** np.arange(recommendation_bit_length))
+
 		return vector
+
+	
+	def _inverse_tabular_decoding(self, tabular_action):
+
+
+		assert 0 <= tabular_action < self.n_actions
+		
+		binary = bin(tabular_action)[2:]
+		bit_length = (self.n_recommendations**self.n_users - 1).bit_length()
+		bin_list = np.zeros(bit_length)
+		start_bit = bit_length - len(binary)
+		for bit in range(start_bit, bit_length):
+			bin_list[bit] = int(binary[bit - start_bit])
+		bin_array = np.reshape(bin_list, (self.n_users, int(bit_length / self.n_users)))
+		int_list = np.zeros(self.n_users, dtype=int)
+		for user in range(self.n_users):
+			int_list[user] = np.dot(np.flip(bin_array[user]), 2 ** np.arange(bin_array[user].size))
+		return int_list
+
+	
+	def reward_function(self, observation, action):
+		polarisation = deepcopy(observation['polarisation'])
+		reward = 0
+		for user in range(self.n_users):
+			reward += self._intracellular_reward_function[polarisation[user], action[user]]
+		reward = reward / (self.n_users * self.n_recommendations)
+		if reward <= 0.2:
+			reward = 0
+		return reward
+
+
+	def tabular_reward_function(self, tabular_observation, tabular_action):
+		
+		observation = self._inverse_tabular_encoding(tabular_observation)
+		action = self._inverse_tabular_decoding(tabular_action)
+		reward = self.reward_function(observation, action)
+		return reward
+
+	
+	def get_side_effects_incidence(self):
+		_, side_effects_incidence = self._get_side_effects()
+		return side_effects_incidence
+
+
+

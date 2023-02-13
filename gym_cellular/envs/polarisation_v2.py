@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from copy import deepcopy
+from gym_cellular.envs.utils.space_transformations import cellular2tabular, tabular2cellular
 
 import gymnasium as gym
 from gymnasium import spaces
@@ -211,128 +212,68 @@ class PolarisationV2Env(gym.Env):
 		
 		return observation, reward, terminated, truncated, info
 
-	def _new_bin_enc(self, observation):
-
-		polarisation = observation['polarisation']
-		two_way_polarisable = np.reshape(observation['two_way_polarisable'], (self.n_users, 1))
-		#intracellular_state_bit_length = polarisation_bit_length + 1
-		polarisation_bit_length = math.ceil(np.log2(self.n_user_states))
-		bin_polarisation_array = np.zeros((self.n_users, polarisation_bit_length), dtype=int)
-		for user in range(self.n_users):
-			bin_str = bin(polarisation[user])[2:]
-			start_bit = polarisation_bit_length - len(bin_str)
-			for bit in range(start_bit, polarisation_bit_length):
-				bin_polarisation_array[user, bit] = bin_str[bit - start_bit]
-		return np.concatenate((bin_polarisation_array, two_way_polarisable), axis=1)
-
-
-	def _binary_encoding(self, observation):
-
-		# unpack observation
-		polarisation = observation['polarisation']
-		two_way_polarisable = observation['two_way_polarisable']
-
-		# form binary array
-		user_state_bit_length = math.ceil(np.log2(self.n_user_states))
-		bin_array = np.zeros((user_state_bit_length + 1, self.n_users), dtype=int)
-		for user in range(self.n_users):
-			bin_str = bin(polarisation[user])[2:]
-			start_bit = user_state_bit_length - len(bin_str)
-			for bit in range(start_bit, user_state_bit_length):
-				bin_array[bit, user] = bin_str[bit - start_bit]
-			bin_array[user_state_bit_length, user] = two_way_polarisable[user]
-		
-		return bin_array
-
 
 	def cellular_encoding(self, observation):
 
-		bin_array = self._new_bin_enc(observation)
-		int_list = np.zeros(self.n_users, dtype=int)
-		for user in range(self.n_users):
-			int_list[user] = int(np.dot(np.flip(bin_array[user,:]), 2 ** np.arange(bin_array[user,:].size)))
-		return int_list
+		"""Turns an obseravtion from the environment into a cellular state representation."""
+
+		polarisation = observation['polarisation']
+		two_way_polarisable = observation['two_way_polarisable']
+		alist = np.zeros(self.n_users, dtype=int)
+		alist = polarisation + two_way_polarisable * self.n_user_states
+		return alist
 
 
 	def cellular_decoding(self, action):
+
+		"""Turns a cellular state representation into an action that can be used as input to the environment."""
 		
+		# trivial in this case
 		return action
 
 	
 	def tabular_encoding(self, observation):
+
+		"""Turns an observation from the environment into a tabular state representation."""
 		
-		bin_array = self._new_bin_enc(observation)
-		bin_list = np.reshape(bin_array, np.prod(np.shape(bin_array)))
-		integer = int(np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size)))
-		return integer
+		alist = self.cellular_encoding(observation)
+		anint = cellular2tabular(alist, self.n_user_states * 2, self.n_users)
+		return anint
 
 	
 	def _inverse_tabular_encoding(self, tabular_observation):
 
+		"""The inverse of tabular_encoding. Turns a tabular state representation into an observation that can be used as input to the environment."""
+
 		assert type(tabular_observation) is int
 		assert 0 <= tabular_observation < self.n_states
 
-		binary = bin(tabular_observation)[2:]
-		bit_length = (self.n_user_states**self.n_users - 1).bit_length() + self.n_users
-		bin_list = np.zeros(bit_length)
-		start_bit = bit_length - len(binary)
-		for bit in range(start_bit, bit_length):
-			bin_list[bit] = int(binary[bit - start_bit])
-		bin_array = np.reshape(bin_list, (self.n_users, int(bit_length / self.n_users)))
-
-		two_way_polarisable = np.array(bin_array[:, -1], dtype=int)
-
-		polarisation = np.zeros(self.n_users, dtype=int)
-		for user in range(self.n_users):
-			polarisation[user] = np.dot(np.flip(bin_array[user, :-1]), 2 ** np.arange(bin_array[user, :-1].size))
-
+		alist = tabular2cellular(tabular_observation, self.n_user_states * 2, self.n_users)
+		polarisation = alist % self.n_user_states 
+		two_way_polarisable = alist // self.n_user_states 
 		observation = {"polarisation": polarisation, "two_way_polarisable": two_way_polarisable}
-
 		return observation
 
 
-	def tabular_decoding(self, action):
+	def tabular_decoding(self, tabular_action):
 
 		"""
-		Turns an action in the form of an integer into a vector of integers.
+		Turns a tabular action representation into an action that can be used as input to the environment.
 		"""
 		
-		# form binary array
-		recommendation_bit_length = self.n_recommendations - 1
-		recommendation_bit_length = recommendation_bit_length.bit_length()
-		end_bit = self.n_users * recommendation_bit_length
-		bin_list = np.zeros(end_bit, dtype=int)
-		bin_str = bin(action)[2:]
-		start_bit = end_bit - len(bin_str)
-		for bit in range(start_bit, end_bit):
-			bin_list[bit] = bin_str[bit - start_bit]
-		bin_array = bin_list.reshape(self.n_users, recommendation_bit_length)
-		vector = np.zeros(self.n_users, dtype=int)
+		assert type(tabular_action) is int
+		assert 0 <= tabular_action < self.n_actions
 
-		# turn binary array into integer list (vector)
-		for user in range(self.n_users):
-			for bit in range(recommendation_bit_length):
-				vector[user] = np.dot(np.flip(bin_array[user, bit]), 2 ** np.arange(recommendation_bit_length))
-
-		return vector
+		alist = tabular2cellular(tabular_action, self.n_recommendations, self.n_users)
+		alist = self.cellular_decoding(alist)
+		return alist
 
 	
-	def _inverse_tabular_decoding(self, tabular_action):
+	def _inverse_tabular_decoding(self, action):
 
-
-		assert 0 <= tabular_action < self.n_actions
-		
-		binary = bin(tabular_action)[2:]
-		bit_length = (self.n_recommendations**self.n_users - 1).bit_length()
-		bin_list = np.zeros(bit_length)
-		start_bit = bit_length - len(binary)
-		for bit in range(start_bit, bit_length):
-			bin_list[bit] = int(binary[bit - start_bit])
-		bin_array = np.reshape(bin_list, (self.n_users, int(bit_length / self.n_users)))
-		int_list = np.zeros(self.n_users, dtype=int)
-		for user in range(self.n_users):
-			int_list[user] = np.dot(np.flip(bin_array[user]), 2 ** np.arange(bin_array[user].size))
-		return int_list
+		assert 0 <= action < self.n_actions
+		tabular_action = cellular2tabular(action, self.n_recommendations, self.n_users)
+		return tabular_action
 
 	
 	def reward_function(self, observation, action):
@@ -341,7 +282,7 @@ class PolarisationV2Env(gym.Env):
 		for user in range(self.n_users):
 			reward += self._intracellular_reward_function[polarisation[user], action[user]]
 		reward = reward / (self.n_users * self.n_recommendations)
-		if reward <= 0.2:
+		if reward <= 0.05:
 			reward = 0
 		return reward
 
@@ -349,7 +290,7 @@ class PolarisationV2Env(gym.Env):
 	def tabular_reward_function(self, tabular_observation, tabular_action):
 		
 		observation = self._inverse_tabular_encoding(tabular_observation)
-		action = self._inverse_tabular_decoding(tabular_action)
+		action = self.tabular_decoding(tabular_action)
 		reward = self.reward_function(observation, action)
 		return reward
 

@@ -33,6 +33,6 @@ class Test_Polarisation:
 
         env = AccessiblePolarisationV2Env(seed=0)
         for flat_observation in range(10):
-            observation = env._inverse_tabular_encoding(0)
+            observation = env._inverse_tabular_encoding(flat_observation)
             new_flat_observation = env.tabular_encoding(observation)
             assert new_flat_observation == flat_observation

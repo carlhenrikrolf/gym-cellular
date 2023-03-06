@@ -1,6 +1,7 @@
 import math
 import numpy as np
 from copy import deepcopy
+from time import sleep
 from gym_cellular.envs.utils.space_transformations import cellular2tabular, tabular2cellular
 
 import gymnasium as gym
@@ -76,6 +77,7 @@ class PolarisationV2Env(gym.Env):
 		_moderator_probs = np.random.rand(n_users, n_users, n_user_states, n_user_states)
 		# picking the set of moderators from the set of users
 		set_of_moderators = np.random.choice(n_users, n_moderators, replace=False)
+		self._set_of_moderators = set_of_moderators
 		# making the complement such that they are silent
 		set_of_nonmoderators = np.setdiff1d(np.array(range(0, n_users)), set_of_moderators)
 		for nonmoderator in set_of_nonmoderators:
@@ -103,8 +105,17 @@ class PolarisationV2Env(gym.Env):
 		# also including such moderators may be more convincing for some people
 		self._moderator_probs = _moderator_probs
 
+		# initialise ...
+		# ... the environment
+		self._initial_polarisation = np.random.randint(self._safe_left_threshold + 1, self._safe_right_threshold + 1, size=self.n_users, dtype=int) #self.np_random.integers(self._safe_left_threshold, self._safe_right_threshold + 1, size=self.n_users, dtype=int) # if it works like np.random.randint
+		# the first + 1 is to make sure going left is safe
+		self._attractor_state[0] = self._initial_polarisation[0] # to make sure 0 action is safe from initial state
+		self._initial_two_way_polarisable = self.np_random.integers(0, 2, size=self.n_users, dtype=int)
+		# ... the policy
+		self.initial_policy  = np.zeros((self.n_users, self.n_states), dtype=int)
+
 	def get_initial_policy(self):
-		return np.zeros((self.n_users, self.n_states), dtype=int)
+		return np.zeros((self.n_users, self.n_states), dtype=int)#self.initial_policy
 		
 	def _get_obs(self):
 		return {"polarisation": self._polarisation, "two_way_polarisable": self._two_way_polarisable}
@@ -136,10 +147,11 @@ class PolarisationV2Env(gym.Env):
 		
 	def reset(self, seed=None, options=None):
 		
-		# ensure that the initial state is safe
-		self._polarisation = self.np_random.integers(self._safe_left_threshold, self._safe_right_threshold + 1, size=self.n_users, dtype=int) # if it works like np.random.randint
-		self._two_way_polarisable = self.np_random.integers(0, 2, size=self.n_users, dtype=int)
-		
+		self._polarisation = self._initial_polarisation
+		#self.np_random.integers(self._safe_left_threshold, self._safe_right_threshold + 1, size=self.n_users, dtype=int) # if it works like np.random.randint
+		self._two_way_polarisable = self._initial_two_way_polarisable
+		#self.np_random.integers(0, 2, size=self.n_users, dtype=int)
+			
 		observation = self._get_obs()
 		info = self._get_info()
 		
@@ -219,7 +231,6 @@ class PolarisationV2Env(gym.Env):
 
 		polarisation = observation['polarisation']
 		two_way_polarisable = observation['two_way_polarisable']
-		alist = np.zeros(self.n_users, dtype=int)
 		alist = polarisation + two_way_polarisable * self.n_user_states
 		return alist
 
@@ -228,8 +239,8 @@ class PolarisationV2Env(gym.Env):
 
 		"""Turns a cellular state representation into an action that can be used as input to the environment."""
 		
-		# trivial in this case
-		return action
+		anaction = deepcopy(action)
+		return anaction
 
 	
 	def tabular_encoding(self, observation):
@@ -282,8 +293,8 @@ class PolarisationV2Env(gym.Env):
 		for user in range(self.n_users):
 			reward += self._intracellular_reward_function[polarisation[user], action[user]]
 		reward = reward / (self.n_users * self.n_recommendations)
-		if reward <= 0.05:
-			reward = 0
+		#if reward <= 0.05:
+		#	reward = 0
 		return reward
 
 
@@ -298,6 +309,74 @@ class PolarisationV2Env(gym.Env):
 	def get_side_effects_incidence(self):
 		_, side_effects_incidence = self._get_side_effects()
 		return side_effects_incidence
+
+
+	def render(self):
+
+		"""Renders the environment."""
+
+		canvas = ''
+		for user in range(self.n_users):
+			for user_state in range(self.n_user_states):
+				if self._two_way_polarisable[user] == 1:
+					if self._safe_left_threshold <= user_state <= self._safe_right_threshold:
+						if user_state == self._polarisation[user]:
+							if user in self._set_of_moderators:
+								canvas += '_M '
+							else:
+								canvas += '_U '
+						else:
+							canvas += '_  '
+					else:
+						if user_state == self._polarisation[user]:
+							if user in self._set_of_moderators:
+								canvas += 'xM '
+							else:
+								canvas += 'xU '
+						else:
+							canvas += 'x  '
+				elif self._initial_polarisation[user] <= self._right_left_split:
+					if self._safe_left_threshold <= user_state <= self._right_left_split:
+						if user_state == self._polarisation[user]:
+							if user in self._set_of_moderators:
+								canvas += '_M '
+							else:
+								canvas += '_U '
+						else:
+							canvas += '_  '
+					elif user_state <= self._right_left_split:
+						if user_state == self._polarisation[user]:
+							if user in self._set_of_moderators:
+								canvas += 'xM '
+							else:
+								canvas += 'xU '
+						else:
+							canvas += 'x  '
+					else:
+						canvas += '|| '
+				else:
+					if self._right_left_split < user_state <= self._safe_right_threshold:
+						if user_state == self._polarisation[user]:
+							if user in self._set_of_moderators:
+								canvas += '_M '
+							else:
+								canvas += '_U '
+						else:
+							canvas += '_  '
+					elif self._right_left_split < user_state:
+						if user_state == self._polarisation[user]:
+							if user in self._set_of_moderators:
+								canvas += 'xM '
+							else:
+								canvas += 'xU '
+						else:
+							canvas += 'x  '
+					else:
+						canvas += '|| '
+			canvas += '\n\n'
+
+		print(canvas)
+		sleep(1) # move outside?
 
 
 

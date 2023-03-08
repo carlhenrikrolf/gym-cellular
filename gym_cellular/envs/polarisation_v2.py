@@ -110,7 +110,7 @@ class PolarisationV2Env(gym.Env):
 		self._initial_polarisation = np.random.randint(self._safe_left_threshold + 1, self._safe_right_threshold + 1, size=self.n_users, dtype=int) #self.np_random.integers(self._safe_left_threshold, self._safe_right_threshold + 1, size=self.n_users, dtype=int) # if it works like np.random.randint
 		# the first + 1 is to make sure going left is safe
 		self._attractor_state[0] = self._initial_polarisation[0] # to make sure 0 action is safe from initial state
-		self._initial_two_way_polarisable = self.np_random.integers(0, 2, size=self.n_users, dtype=int)
+		self._initial_two_way_polarisable = np.random.randint(0, 2, size=self.n_users, dtype=int)
 		# ... the policy
 		self.initial_policy  = np.zeros((self.n_users, self.n_states), dtype=int)
 

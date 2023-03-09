@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import random
 from copy import deepcopy
 from time import sleep
 from gym_cellular.envs.utils.space_transformations import cellular2tabular, tabular2cellular
@@ -50,6 +51,7 @@ class PolarisationV2Env(gym.Env):
 		
 		# seed random generator for how the environment is initialised
 		np.random.seed(seed=self.seed)
+		random.seed(self.seed)
 
 		# for each action, decide a level of polarisation towards which it is attracted
 		self._attractor_state = np.random.randint(0, n_user_states, size=n_recommendations, dtype=int)
@@ -113,6 +115,19 @@ class PolarisationV2Env(gym.Env):
 		self._initial_two_way_polarisable = np.random.randint(0, 2, size=self.n_users, dtype=int)
 		# ... the policy
 		self.initial_policy  = np.zeros((self.n_users, self.n_states), dtype=int)
+
+		# cell classification
+		self.cell_classes = ["children", "nonconsenting"]
+		self.cell_labelling_function = deepcopy(self.cell_classes)
+		for cell_class in range(len(self.cell_classes)):
+			n = random.randint(0, self.n_users)
+			self.cell_labelling_function[cell_class] = random.sample(range(self.n_users), n)
+	
+	def get_cell_classes(self):
+		return self.cell_classes
+	
+	def get_cell_labelling_function(self):
+		return self.cell_labelling_function
 
 	def get_initial_policy(self):
 		return np.zeros((self.n_users, self.n_states), dtype=int)#self.initial_policy

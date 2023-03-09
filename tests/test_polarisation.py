@@ -36,3 +36,15 @@ class Test_Polarisation:
             observation = env._inverse_tabular_encoding(flat_observation)
             new_flat_observation = env.tabular_encoding(observation)
             assert new_flat_observation == flat_observation
+
+    def test_side_effects_consistency(self):
+
+        for seed in range(20):
+            env = AccessiblePolarisationV2Env(seed=0, n_recommendations=4, n_user_states=4)
+            observation, info = env.reset()
+            for _ in range(1000):
+                action = env.action_space.sample()
+                observation, reward, terminated, truncated, info = env.step(action)
+                side_effects = info['side_effects']
+                side_effects_incidence = env.get_side_effects_incidence()
+                assert (not 'unsafe' in side_effects) or (side_effects_incidence > 0)

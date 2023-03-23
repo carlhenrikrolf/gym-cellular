@@ -3,12 +3,12 @@ import numpy as np
 import random
 from copy import deepcopy
 from time import sleep
-from gym_cellular.envs.utils.space_transformations import cellular2tabular, tabular2cellular
+from gym_cellular.envs.utils.space_transformations import pruned_cellular2tabular as cellular2tabular, pruned_tabular2cellular as tabular2cellular
 
 import gymnasium as gym
 from gymnasium import spaces
 
-class PolarisationV2Env(gym.Env):
+class PolarisationV3Env(gym.Env):
 	
 	"""
 	This is version 3.
@@ -60,21 +60,8 @@ class PolarisationV2Env(gym.Env):
 		
 		# prune the state space
 		# doesnt have to be in __init__, could just be a function to be called, for later ...
-		if self.transient_state_pruning:
-			self.cellular_state_space = np.zeros(self.n_cells, dtype=range)
-			self.n_states = np.zeros(self.n_cells, dtype=int)
-			for cell in range(self.n_cells):
-				if self._initial_two_way_polarisable[cell] == 0:
-					arange = range(0, self.n_user_states)
-				elif self._initial_polarisation[cell] <= self._right_left_split:
-					arange = range(0, self._right_left_split + 1)
-				else:
-					arange = range(self._right_left_split + 1, self.n_user_states)
-				self.cellular_state_space[cell] = arange
-				self.n_states[cell] = len(arange) # sum(self.n_states) will be the number of tabular states
-		else:
-			self.n_states = self.n_user_states * 2, self.n_users
-		self.n_actions = self.n_recommendations ** self.n_users
+		self.intracellular_state_space_set = self.get_intracellular_state_space_set()
+		self.intracellular_action_space_set = self.get_intracellular_action_space_set()
 
 
 	def _initialise_environment(self):
@@ -157,18 +144,49 @@ class PolarisationV2Env(gym.Env):
 		for cell_class in range(len(self.cell_classes)):
 			n = random.randint(0, self.n_users)
 			self.cell_labelling_function[cell_class] = random.sample(range(self.n_users), n)
+
+
+	def get_intracellular_state_space_set(self):
+
+		intracellular_state_space_set = np.zeros(self.n_users, dtype=range)
+		if self.transient_state_pruning:
+			for user in range(self.n_users):
+				if self._initial_two_way_polarisable[user] == 0:
+					arange = range(0, self.n_user_states)
+				elif self._initial_polarisation[user] <= self._right_left_split:
+					arange = range(self.n_user_states, self.n_user_states + self._right_left_split + 1)
+				else:
+					arange = range(self.n_user_states + self._right_left_split + 1, self.n_user_states + self.n_user_states)
+				intracellular_state_space_set[user] = arange
+		else:
+			for user in range(self.n_users):
+				intracellular_state_space_set[user] = range(0, self.n_user_states * 2)
+		return intracellular_state_space_set
+	
+
+	def get_intracellular_action_space_set(self):
+
+		intracellular_action_space_set = np.zeros(self.n_users, dtype=range)
+		for user in range(self.n_users):
+			intracellular_action_space_set[user] = range(0, self.n_recommendations)
+		return intracellular_action_space_set
+	
 	
 	def get_cell_classes(self):
 		return self.cell_classes
 	
+	
 	def get_cell_labelling_function(self):
 		return self.cell_labelling_function
+	
 
 	def get_initial_policy(self):
 		return self.initial_policy 
 	
+	
 	def _get_obs(self):
 		return {"polarisation": self._polarisation, "two_way_polarisable": self._two_way_polarisable}
+	
 	
 	def _get_side_effects(self):
 
@@ -285,11 +303,13 @@ class PolarisationV2Env(gym.Env):
 
 	def cellular_encoding(self, observation):
 
-		"""Turns an obseravtion from the environment into a cellular state representation."""
+		"""Turns an observation from the environment into a cellular state representation."""
 
 		polarisation = observation['polarisation']
 		two_way_polarisable = observation['two_way_polarisable']
-		alist = polarisation + two_way_polarisable * self.n_user_states
+		alist = np.zeros(self.n_users, dtype=int)
+		for user in range(self.n_users):
+			alist[user] = polarisation[user] + two_way_polarisable[user] * self.n_user_states
 		return alist
 
 
@@ -306,7 +326,7 @@ class PolarisationV2Env(gym.Env):
 		"""Turns an observation from the environment into a tabular state representation."""
 		
 		alist = self.cellular_encoding(observation)
-		anint = cellular2tabular(alist, self.n_user_states * 2, self.n_users)
+		anint = cellular2tabular(alist, self.intracellular_state_space_set)
 		return anint
 
 	
@@ -317,7 +337,7 @@ class PolarisationV2Env(gym.Env):
 		assert type(tabular_observation) is int
 		assert 0 <= tabular_observation < (self.n_user_states * 2) ** self.n_users
 
-		alist = tabular2cellular(tabular_observation, self.n_user_states * 2, self.n_users)
+		alist = tabular2cellular(tabular_observation, self.intracellular_state_space_set)
 		polarisation = alist % self.n_user_states 
 		two_way_polarisable = alist // self.n_user_states 
 		observation = {"polarisation": polarisation, "two_way_polarisable": two_way_polarisable}
@@ -333,7 +353,7 @@ class PolarisationV2Env(gym.Env):
 		assert type(tabular_action) is int
 		assert 0 <= tabular_action < self.n_recommendations ** self.n_users
 
-		alist = tabular2cellular(tabular_action, self.n_recommendations, self.n_users)
+		alist = tabular2cellular(tabular_action, self.intracellular_action_space_set)
 		alist = self.cellular_decoding(alist)
 		return alist
 
@@ -341,7 +361,7 @@ class PolarisationV2Env(gym.Env):
 	def _inverse_tabular_decoding(self, action):
 
 		assert 0 <= action < self.n_recommendations ** self.n_users
-		tabular_action = cellular2tabular(action, self.n_recommendations, self.n_users)
+		tabular_action = cellular2tabular(action, self.intracellular_action_space_set)
 		return tabular_action
 
 	

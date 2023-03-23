@@ -24,3 +24,8 @@ register(
 	id="gym_cellular/Polarisation-v2",
 	entry_point="gym_cellular.envs:PolarisationV2Env",
 )
+
+register(
+	id="gym_cellular/Polarisation-v3",
+	entry_point="gym_cellular.envs:PolarisationV3Env",
+)

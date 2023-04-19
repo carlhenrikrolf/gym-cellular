@@ -117,11 +117,14 @@ class PolarisationV2Env(gym.Env):
 		self.initial_policy  = np.zeros((self.n_users, self.n_states), dtype=int)
 
 		# cell classification
-		self.cell_classes = ["children", "nonconsenting"]
+		self.cell_classes = ["children", "nonconsenting", "unemployed"]
 		self.cell_labelling_function = deepcopy(self.cell_classes)
 		for cell_class in range(len(self.cell_classes)):
-			n = random.randint(0, self.n_users)
-			self.cell_labelling_function[cell_class] = random.sample(range(self.n_users), n)
+			n = np.random.randint(0, self.n_users)
+			user_set = np.random.choice(range(self.n_users), n)
+			if cell_class in {'children', 'nonconsenting'}:
+				user_set = list(np.setdiff1d(user_set, self._set_of_moderators)) # list may or may not be necessary
+			self.cell_labelling_function[cell_class] = user_set
 	
 	def get_cell_classes(self):
 		return self.cell_classes

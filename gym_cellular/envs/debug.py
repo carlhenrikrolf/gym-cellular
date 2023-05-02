@@ -85,11 +85,13 @@ class DebugEnv(gym.Env):
     
 
     def get_info(self):
-        info = {'side_effects':
+        info = {'side_effects': np.array(
             [
                 ['silent', 'silent'],
                 ['silent', 'silent'],
-            ]
+            ],
+            dtype='<U6',
+        )
         }
         return info
     

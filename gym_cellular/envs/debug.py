@@ -1,5 +1,6 @@
 from gym_cellular.envs.utils.generalized_space_transformations import generalized_cellular2tabular, generalized_tabular2cellular
 
+import copy as cp
 import gymnasium as gym
 import numpy as np
 
@@ -36,46 +37,50 @@ class DebugEnv(gym.Env):
             ] * self.n_cells
         )
 
+        self.data = {}
+
 
     def reset(self, seed=0):
         self.side_effects_incidence = 0.0
-        state = self.initial_state
-        self.state = state
+        self.side_effects=np.array(
+                [
+                    ['safe', 'silent'],
+                    ['silent', 'silent'],
+                ],
+                dtype='<U6',
+            )
+        self.state = cp.copy(self.initial_state)
         info = self.get_info()
-        return state, info
+        return self.state, info
     
 
     def step(self, action):
-        observation = self.transition_func(self.state, action)
-        reward = self.reward_func(self.state, action, observation)
+        next_state = self.transition_func(self.state, action)
+        self.reward = self.reward_func(self.state, action, next_state)
+        self.side_effects = self.side_effects_func(next_state)
+        self.state = next_state
         terminated = False
         truncated = False
         info = self.get_info()
-        self.state = observation
-        self.reward = reward
-        return observation, reward, terminated, truncated, info
+        return self.state, self.reward, terminated, truncated, info
     
 
     def get_data(self):
-        data = {
-            'reward': self.reward,
-            'side_effects_incidence': self.side_effects_incidence,
-        }
-        return data
+        self.data['reward'] = self.reward
+        return self.data
     
     
     def transition_func(self, state, action):
         next_state = [0, 0]
-        self.side_effects_incidence = 0.0
         for cell in range(self.n_cells):
             if state[cell] == 0:
-                self.side_effects_incidence += 0.0
+                #self.side_effects_incidence += 0.0
                 if action[cell] == 0:
                     next_state[cell] = 0
                 elif action[cell] == 1:
                     next_state[cell] = 1
             elif state[cell] == 1:
-                self.side_effects_incidence += 0.5
+                #self.side_effects_incidence += 0.5
                 if action[cell] == 0:
                     next_state[cell] = 1
                 elif action[cell] == 1:
@@ -84,15 +89,33 @@ class DebugEnv(gym.Env):
         return next_state
     
 
+    def side_effects_func(self, state):
+        side_effects=np.array(
+                [
+                    ['silent', 'silent'],
+                    ['silent', 'silent'],
+                ],
+                dtype='<U6',
+            )
+        if state==(1,1):
+            self.data['side_effects_incidence'] = 1.0
+        elif state==(1,0):
+            self.data['side_effects_incidence'] = 0.5
+        elif state==(0,1):
+            self.data['side_effects_incidence'] = 0.5
+            side_effects[0,1] = 'unsafe'
+            side_effects[0,0] = 'safe'
+        elif state==(0,0):
+            self.data['side_effects_incidence'] = 0.0
+            side_effects[0,0] = 'safe'
+        else:
+            raise RuntimeError('Invalid state.')
+        return side_effects
+            
+    
+
     def get_info(self):
-        info = {'side_effects': np.array(
-            [
-                ['silent', 'silent'],
-                ['silent', 'silent'],
-            ],
-            dtype='<U6',
-        )
-        }
+        info = {'side_effects': self.side_effects}
         return info
     
 
@@ -112,6 +135,7 @@ class PriorKnowledge:
         self.cell_classes = []
         self.cell_labelling = [[]] * self.n_cells
         self.confidence_level = 0.95
+        self.cellular_transfer = True
 
         # derived quantities
         intracellular_state_set = set()

@@ -135,7 +135,8 @@ class PriorKnowledge:
         self.cell_classes = []
         self.cell_labelling = [[]] * self.n_cells
         self.confidence_level = 0.95
-        self.cellular_transfer = True
+        self.identical_intracellular_transitions = True
+        self.initial_safe_states = [(0,0)]
 
         # derived quantities
         intracellular_state_set = set()

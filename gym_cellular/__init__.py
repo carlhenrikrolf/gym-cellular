@@ -35,3 +35,9 @@ register(
     entry_point="gym_cellular.envs:DebugEnv",
     max_episode_steps=None,
 )
+
+register(
+    id="gym_cellular/Cells3States3Actions3-v0",
+    entry_point="gym_cellular.envs:Cells3States3Actions3Env",
+    max_episode_steps=None,
+)

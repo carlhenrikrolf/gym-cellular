@@ -41,7 +41,8 @@ class DebugEnv(gym.Env):
 
 
     def reset(self, seed=0):
-        self.side_effects_incidence = 0.0
+        self.reward = 0.0
+        self.data['side_effects_incidence'] = 0.0
         self.side_effects=np.array(
                 [
                     ['safe', 'silent'],

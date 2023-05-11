@@ -4,6 +4,50 @@ import copy as cp
 import gymnasium as gym
 import numpy as np
 
+n_cells = 3
+
+def right_polarizing(state, action, next_state):
+    reward = 0.0
+    for cell in range(n_cells):
+        if state[cell] == 0:
+            if action[cell] in [1,2]:
+                reward += 0.15
+        elif state[cell] == 1:
+            if action[cell] == 1:
+                reward += 0.10
+            elif action[cell] == 2:
+                reward += 0.30
+        else:
+            if action[cell] == 2:
+                reward += 0.25
+            else:
+                reward += 0.10
+    return reward
+
+def multiple_optima(state, action, next_state):
+    reward = 0.0
+    for cell in range(n_cells):
+        if state[cell] == 0:
+            if action[cell] in [1,2]:
+                reward += 0.2
+        elif state[cell] == 1:
+            if action[cell] == 1:
+                reward += 0.15
+            elif action[cell] == 2:
+                reward += 0.25
+        else:
+            if action[cell] == 2:
+                reward += 0.25
+            elif action[cell] == 1:
+                reward += 0.25
+            else:
+                reward += 0.10
+    return reward
+
+def nonlinear(state, action, next_state):
+    reward = np.log2(1 + multiple_optima(state, action, next_state))
+    return reward
+
 class Cells3States3Actions3Env(gym.Env):
 
     def __init__(
@@ -11,8 +55,7 @@ class Cells3States3Actions3Env(gym.Env):
             **kwargs,
         ):
 
-        self.prior_knowledge = PriorKnowledge()
-        self.config_prior_knowledge(**kwargs)
+        self.prior_knowledge = PriorKnowledge(**kwargs)
         self.n_cells = self.prior_knowledge.n_cells
         self.initial_state = self.prior_knowledge.initial_state
         self.reward_func = self.prior_knowledge.reward_func
@@ -126,14 +169,14 @@ class Cells3States3Actions3Env(gym.Env):
                 elif state[1] == 1:
                     pass
                 elif state[1] == 2:
-                    pass
+                    pass #side_effects[0,1] = 'unsafe'
                 if state[2] == 0:
                     pass
                 elif state[2] == 1:
                     side_effects[0,2] = 'safe'
                 elif state[2] == 2:
                     side_effects[0,2] = 'unsafe'
-            if state[1] == 0:
+            if state[0] == 1:
                 if state[1] == 0:
                     pass
                 elif state[1] == 1:
@@ -145,7 +188,7 @@ class Cells3States3Actions3Env(gym.Env):
                 elif state[2] == 1:
                     side_effects[0,2] = 'safe'
                 elif state[2] == 2:
-                    pass
+                    pass #side_effects[0,2] = 'unsafe'
         elif self.difficulty == 'hard':
             if state[0] == 0:
                 side_effects[0,0] = 'safe'
@@ -164,16 +207,9 @@ class Cells3States3Actions3Env(gym.Env):
         return info
     
 
-    def config_prior_knowledge(self, **kwargs):
-        if 'confidence_level' in kwargs:
-            self.prior_knowledge.confidence_level = kwargs['confidence_level']
-        if 'identical_intracellular_transitions' in kwargs:
-            self.prior_knowledge.identical_intracellular_transitions = kwargs['identical_intracellular_transitions']
-    
-
 class PriorKnowledge:
 
-    def __init__(self):
+    def __init__(self, **kwargs):
 
         # defined quantities in cellular MDP
         self.state_space = [
@@ -187,9 +223,19 @@ class PriorKnowledge:
         self.initial_state = tuple([0] * self.n_cells)
         self.cell_classes = ['moderators', 'children']
         self.cell_labelling = [[0], [], [1]]
-        self.confidence_level = 0.95
-        self.identical_intracellular_transitions = True
+        if 'confidence_level' in kwargs:
+            self.confidence_level = kwargs['confidence_level']
+        else:
+            self.confidence_level = 0.95
+        if 'identical_intracellular_transitions' in kwargs:
+            self.identical_intracellular_transitions = kwargs['identical_intracellular_transitions']
+        else:
+            self.identical_intracellular_transitions = True
         self.initial_safe_states = [(0,0,0)]
+        if 'reward_func' in kwargs:
+            self.reward_func = kwargs['reward_func']
+        else:
+            self.reward_func = right_polarizing
 
         # derived quantities
         intracellular_state_set = set()
@@ -224,25 +270,6 @@ class PriorKnowledge:
         cellular_element = generalized_tabular2cellular(tabular_element, space)
         element = tuple(cellular_element)
         return element
-    
-
-    def reward_func(self, state, action, next_state):
-        reward = 0.0
-        for cell in range(self.n_cells):
-            if state[cell] == 0:
-                if action[cell] in [1,2]:
-                    reward += 0.15
-            elif state[cell] == 1:
-                if action[cell] == 1:
-                    reward += 0.10
-                elif action[cell] == 2:
-                    reward += 0.30
-            else:
-                if action[cell] == 2:
-                    reward += 0.25
-                else:
-                    reward += 0.10
-        return reward
     
 
     def initial_policy(self, state):

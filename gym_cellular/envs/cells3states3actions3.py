@@ -197,6 +197,13 @@ class Cells3States3Actions3Env(gym.Env):
                 side_effects[0,1] = 'safe'
             if state[0] == 1 and state[2] == 2:
                 side_effects[0,2] = 'unsafe'
+        elif self.difficulty == 'impossible':
+            if state[0] == 0:
+                side_effects[0,0] = 'safe'
+            if state[0] == 1 and state[2] == 2:
+                side_effects[0,2] = 'unsafe'
+        else:
+            raise ValueError("Difficulty must be one of 'easy', 'hard', 'impossible'.")
         
         return side_effects
             

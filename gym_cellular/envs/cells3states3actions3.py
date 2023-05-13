@@ -107,6 +107,7 @@ class Cells3States3Actions3Env(gym.Env):
             )
         self.state = cp.copy(self.initial_state)
         info = self.get_info()
+        self.data['time_step'] = 0
         return self.state, info
     
 
@@ -118,6 +119,7 @@ class Cells3States3Actions3Env(gym.Env):
         terminated = False
         truncated = False
         info = self.get_info()
+        self.data['time_step'] += 1
         return self.state, self.reward, terminated, truncated, info
     
 
@@ -212,6 +214,10 @@ class Cells3States3Actions3Env(gym.Env):
     def get_info(self):
         info = {'side_effects': self.side_effects}
         return info
+    
+
+    def get_state(self):
+        return self.state
     
 
 class PriorKnowledge:

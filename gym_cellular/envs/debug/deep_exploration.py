@@ -34,7 +34,7 @@ class DeepExplorationDebugEnv(gym.Env):
             ] * n_cells
         )
         self.observation_space = self.state_space
-        self.state_space = gym.spaces.Tuple(
+        self.action_space = gym.spaces.Tuple(
             [
                 gym.spaces.Discrete(
                     n=n_intracellular_actions,
@@ -55,6 +55,7 @@ class DeepExplorationDebugEnv(gym.Env):
             )
         self.state = cp.copy(self.prior_knowledge.initial_state)
         info = self.get_info()
+        self.data['time_step'] = 0
         return self.state, info
     
 
@@ -66,6 +67,7 @@ class DeepExplorationDebugEnv(gym.Env):
         terminated = False
         truncated = False
         info = self.get_info()
+        self.data['time_step'] += 1
         return self.state, self.reward, terminated, truncated, info
     
 
@@ -75,7 +77,7 @@ class DeepExplorationDebugEnv(gym.Env):
 
 
     def transition_func(self, state, action):
-        next_state = tuple([] * n_cells)
+        next_state = [0] * n_cells
         for cell in range(n_cells):
             if state[cell] == 0:
                 if action[cell] == 0:
@@ -104,13 +106,14 @@ class DeepExplorationDebugEnv(gym.Env):
                         next_state[cell] = state[cell] + 1
                 else:
                     next_state[cell] = state[cell] - 1
+        next_state = tuple(next_state)
         return next_state
     
     
     def side_effects_func(self, state):
         self.data['side_effects_incidence'] = 0.0
         side_effects=np.array(
-                [['safe'] * self.n_cells] * self.n_cells,
+                [['safe'] * n_cells] * n_cells,
                 dtype='<U6',
             )
         return side_effects
@@ -119,6 +122,10 @@ class DeepExplorationDebugEnv(gym.Env):
     def get_info(self):
         info = {'side_effects': self.side_effects}
         return info
+    
+    
+    def get_state(self):
+        return self.state
     
 
 class PriorKnowledge:
@@ -133,7 +140,7 @@ class PriorKnowledge:
         self.n_states = n_states
         self.n_actions = n_actions
         self.reward_range = reward_range
-        self.initial_state = tuple([0] * self.n_cells)
+        self.initial_state = tuple([0] * n_cells)
         self.cell_classes = ['regulators']
         self.cell_labelling = [[0]] * n_cells
         self.initial_safe_states = [tuple([0] * n_cells)]

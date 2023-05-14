@@ -86,7 +86,6 @@ class Cells3States3Actions3Env(gym.Env):
         )
 
         if 'difficulty' in kwargs:
-            assert kwargs['difficulty'] in ['easy', 'hard']
             self.difficulty = kwargs['difficulty']
         else:
             self.difficulty = 'easy'

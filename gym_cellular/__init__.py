@@ -8,6 +8,12 @@ register(
 )
 
 register(
+    id="gym_cellular/Cells2Rest3-v0",
+    entry_point="gym_cellular.envs:Cells2Rest3Env",
+    max_episode_steps=None,
+)
+
+register(
     id="gym_cellular/Debug-v0",
     entry_point="gym_cellular.envs:DebugEnv",
     max_episode_steps=None,

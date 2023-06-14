@@ -58,7 +58,10 @@ class Cells3States3Actions3Env(gym.Env):
         self.prior_knowledge = PriorKnowledge(**kwargs)
         self.n_cells = self.prior_knowledge.n_cells
         self.initial_state = self.prior_knowledge.initial_state
-        self.reward_func = self.prior_knowledge.reward_func
+        if 'reward_func' in kwargs:
+            self.reward_func = kwargs['reward_func']
+        else:
+            self.reward_func = right_polarizing
         self.state_space = gym.spaces.Tuple(
             [
                 gym.spaces.Discrete(
@@ -244,10 +247,13 @@ class PriorKnowledge:
         else:
             self.identical_intracellular_transitions = True
         self.initial_safe_states = [(0,0,0)]
-        if 'reward_func' in kwargs:
-            self.reward_func = kwargs['reward_func']
-        else:
-            self.reward_func = right_polarizing
+        if 'reward_func_is_known' not in kwargs:
+            kwargs['reward_func_is_known'] = True
+        if kwargs['reward_func_is_known']:
+            if 'reward_func' in kwargs:
+                self.reward_func = kwargs['reward_func']
+            else:
+                self.reward_func = right_polarizing
 
         # derived quantities
         intracellular_state_set = set()

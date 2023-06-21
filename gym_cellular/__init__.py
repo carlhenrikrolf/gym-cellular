@@ -31,3 +31,9 @@ register(
     entry_point="gym_cellular.envs:DeepExplorationDebugEnv",
     max_episode_steps=None,
 )
+
+register(
+    id='gym_cellular/Cells3ResetVDeadlock-v0',
+    entry_point='gym_cellular.envs:Cells3ResetVDeadlockEnv',
+    max_episode_steps=None,
+)

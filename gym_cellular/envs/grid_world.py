@@ -84,7 +84,7 @@ class GridWorldEnv(gym.Env):
         state = (
             {
                 'agt': {
-                    'position': (0, 1),
+                    'position': (1, 1),
                 },
                 'living_trees': np.array(
                     [
@@ -107,17 +107,18 @@ class GridWorldEnv(gym.Env):
     
 
     def transition_func(self, state, action):
-        assert action in self.prior_knowledge.available_actions(state)
-        next_state = [
+        # assert state in available actions
+        next_state = cp.deepcopy([
             {
             'agt': {},
-            'living_trees': tree_positions,
-            }
-        ] * n_jurisdictions
+            'living_trees': cp.deepcopy(tree_positions),
+            } for _ in range(n_jurisdictions)
+        ])
         for jurisdiction in range(n_jurisdictions):
             # movement of RL agent
             if 'position' in state[jurisdiction]['agt'] and 'position' in action[jurisdiction]['go_to']:
                 next_state[jurisdiction]['agt']['position'] = action[jurisdiction]['go_to']['position']
+                go_to_jurisdiction = jurisdiction
             elif 'position' in state[jurisdiction]['agt']:
                 for go_to_jurisdiction in range(n_jurisdictions):
                     if 'position' in action[go_to_jurisdiction]['go_to']:
@@ -126,16 +127,19 @@ class GridWorldEnv(gym.Env):
             else:
                 continue
             # growth of trees
-            was_at_tree = state[jurisdiction]['living_trees'][state[jurisdiction]['agt']['position']]
-            is_at_tree = state[jurisdiction]['living_trees'][next_state[jurisdiction]['agt']['position']]
+            was_where = state[jurisdiction]['agt']['position']
+            was_at_tree = (state[jurisdiction]['living_trees'][was_where[0], was_where[1]] == 0 and tree_positions[was_where[0], was_where[1]] == 1)
+            is_where = next_state[go_to_jurisdiction]['agt']['position']
+            is_at_tree = (state[go_to_jurisdiction]['living_trees'][is_where[0], is_where[1]] == 1)
             if was_at_tree and is_at_tree:
-                next_state[jurisdiction]['living_trees'][state[jurisdiction]['agt']['position']] = 0
-                next_state[jurisdiction]['living_trees'][next_state[jurisdiction]['agt']['position']] = 0
-            elif was_at_tree and not is_at_tree:
-                next_state[jurisdiction]['living_trees'][state[jurisdiction]['agt']['position']] = 0
-            elif not was_at_tree and is_at_tree:
-                next_state[jurisdiction]['living_trees'][next_state[jurisdiction]['agt']['position']] = 0
-        return tuple(next_state)
+                next_state[jurisdiction]['living_trees'][was_where[0], was_where[1]] = 0
+                next_state[go_to_jurisdiction]['living_trees'][is_where[0], is_where[1]] = 0
+            elif is_at_tree:
+                next_state[go_to_jurisdiction]['living_trees'][is_where[0], is_where[1]] = 0
+            elif was_at_tree:
+                next_state[jurisdiction]['living_trees'][was_where[0], was_where[1]] = 0
+            break
+        return cp.deepcopy(tuple(next_state))
     
     def side_effects_func(self, state):
         return np.array(
@@ -168,8 +172,6 @@ class PriorKnowledge():
             if 'position' in state[cell]['agt']:
                 break
         other_cell = 0 if cell == 1 else 1
-        print('cell', cell)
-        print('other_cell', other_cell)
         if (state[cell]['agt']['position'] == np.array([0, 0])).all():
             right = cp.deepcopy(action_template)
             right[cell]['go_to']['position'] = np.array([0, 1])

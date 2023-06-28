@@ -1,4 +1,6 @@
-# modules
+# internal modules
+from gym_cellular.envs.utils import generalized_cellular2tabular, generalized_tabular2cellular
+# external modules
 import copy as cp
 import gymnasium as gym
 import numpy as np
@@ -196,6 +198,7 @@ class PriorKnowledge():
     def __init__(self, **kwargs):
 
         self.n_cells = n_jurisdictions
+        self.action_space = [range(0, grid_shape[0] * grid_shape[1] + 1) for _ in range(self.n_cells)]
         self.reward_func = reward_func
 
         self.initial_state = (
@@ -263,3 +266,48 @@ class PriorKnowledge():
             out = cp.deepcopy(action_template)
             out[other_cell]['go_to']['position'] = np.array([0, 1])
             return [tuple(stay), tuple(up), tuple(left), tuple(out)]
+        
+    def is_available(self, state, action):
+        return True
+
+    def cellularize(self, element, space: str):
+
+        if space == 'action':
+            cellular_action = np.zeros(
+                shape=self.n_cells,
+                dtype=int,
+            )
+            for cell in range(self.n_cells):
+                if 'position' in element[cell]['go_to']:
+                    cellular_action[cell] = element[cell]['go_to']['position'][0] * grid_shape[1] + element[cell]['go_to']['position'][1]
+                else:
+                    cellular_action[cell] = grid_shape[0] * grid_shape[1]
+            return cellular_action
+        
+    def decellularize(self, cellular_element, space: str):
+
+        if space == 'action':
+            action = [{'go_to': {}} for _ in range(self.n_cells)]
+            for cell in range(self.n_cells):
+                if cellular_element[cell] < grid_shape[0] * grid_shape[1]:
+                    action[cell]['go_to']['position'] = np.array(
+                        [
+                            cellular_element[cell] // grid_shape[1],
+                            cellular_element[cell] % grid_shape[1],
+                        ]
+                    )
+            return tuple(action)
+        
+    def tabularize(self, element, space: str):
+
+        if space == 'action':
+            cellular_action = self.cellularize(element, space='action')
+            tabular_action = generalized_cellular2tabular(cellular_action, self.action_space)
+            return tabular_action
+    
+    def detabularize(self, tabular_element, space: str):
+
+        if space == 'action':
+            cellular_action = generalized_tabular2cellular(tabular_element, self.action_space)
+            action = self.decellularize(cellular_action, space='action')
+            return action

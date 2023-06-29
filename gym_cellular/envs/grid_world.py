@@ -197,9 +197,31 @@ class GridWorldEnv(gym.Env):
 class PriorKnowledge():
     def __init__(self, **kwargs):
 
+        # defind quantities
         self.n_cells = n_jurisdictions
-        self.action_space = [range(0, grid_shape[0] * grid_shape[1] + 1) for _ in range(self.n_cells)]
+        self.n_intracellular_actions = grid_shape[0] * grid_shape[1] + 1
+        self.action_space = [range(0, self.n_intracellular_actions) for _ in range(self.n_cells)]
+        self.n_intracellular_states = (grid_shape[0] * grid_shape[1] + 1) * 2 ** tree_positions.sum()
+        self.state_space = [range(0, self.n_intracellular_states) for _ in range(self.n_cells)]
         self.reward_func = reward_func
+        self.cell_classes = ['regulator']
+        self.cell_labelling = [[] for _ in range(self.n_cells)] # does not know where the regulator is
+        if 'confidence_level' in kwargs:
+            self.confidence_level = kwargs['confidence_level']
+        else:
+            self.confidence_level = 0.95
+        if 'identical_intracellular_transitions' in kwargs:
+            self.identical_intracellular_transitions = kwargs['identical_intracellular_transitions']
+        else:
+            self.identical_intracellular_transitions = True
+        self.initial_safe_states = [(0,0,0)]
+        if 'reward_func_is_known' not in kwargs:
+            kwargs['reward_func_is_known'] = True
+        if kwargs['reward_func_is_known']:
+            if 'reward_func' in kwargs:
+                self.reward_func = kwargs['reward_func']
+            else:
+                self.reward_func = reward_func
 
         self.initial_state = (
             {
@@ -223,6 +245,10 @@ class PriorKnowledge():
                 )
             },
         )
+
+        # derived quantities
+        self.n_states = self.n_intracellular_states ** self.n_cells # overestimate
+        self.n_actions = self.n_intracellular_actions ** self.n_cells #overestimate
 
     def available_actions(self, state):
         action_template = [{'go_to': {}} for _ in range(self.n_cells)] 
@@ -268,7 +294,19 @@ class PriorKnowledge():
             return [tuple(stay), tuple(up), tuple(left), tuple(out)]
         
     def is_available(self, state, action):
-        return True
+        for available_action in self.available_actions(state):
+            output = True
+            for cell in range(self.n_cells):
+                if 'position' in action[cell]['go_to'] and 'position' in available_action[cell]['go_to']:
+                    if not (action[cell]['go_to']['position'] == available_action[cell]['go_to']['position']).all():
+                        output = False
+                        break
+                elif ('position' in action[cell]['go_to']) ^ ('position' in available_action[cell]['go_to']):
+                    output = False
+                    break
+            if output is True:
+                break
+        return output
 
     def cellularize(self, element, space: str):
 
@@ -336,6 +374,12 @@ class PriorKnowledge():
             cellular_action = self.cellularize(element, space='action')
             tabular_action = generalized_cellular2tabular(cellular_action, self.action_space)
             return tabular_action
+        elif space == 'state':
+            cellular_state = self.cellularize(element, space='state')
+            tabular_state = generalized_cellular2tabular(cellular_state, self.state_space)
+            return tabular_state
+        else:
+            raise ValueError('space must be either action or state')
     
     def detabularize(self, tabular_element, space: str):
 
@@ -343,3 +387,12 @@ class PriorKnowledge():
             cellular_action = generalized_tabular2cellular(tabular_element, self.action_space)
             action = self.decellularize(cellular_action, space='action')
             return action
+        elif space == 'state':
+            cellular_state = generalized_tabular2cellular(tabular_element, self.state_space)
+            state = self.decellularize(cellular_state, space='state')
+            return state
+        else:
+            raise ValueError('space must be either action or state')
+        
+    def initial_policy(self, state):
+        ...

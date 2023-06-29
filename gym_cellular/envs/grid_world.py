@@ -283,6 +283,17 @@ class PriorKnowledge():
                 else:
                     cellular_action[cell] = grid_shape[0] * grid_shape[1]
             return cellular_action
+        elif space == 'state':
+            cellular_state = np.zeros(shape=self.n_cells,dtype=int)
+            for cell in range(self.n_cells):
+                for i, tp in enumerate(np.nonzero(tree_positions)):
+                    if element[cell]['living_trees'][tp] == 1:
+                        cellular_state[cell] += 2 ** i
+                        ...
+                
+            return cellular_state
+        else:
+            raise ValueError('space must be either action or state')
         
     def decellularize(self, cellular_element, space: str):
 

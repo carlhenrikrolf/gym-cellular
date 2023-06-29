@@ -287,10 +287,12 @@ class PriorKnowledge():
             cellular_state = np.zeros(shape=self.n_cells,dtype=int)
             for cell in range(self.n_cells):
                 for i, tp in enumerate(np.nonzero(tree_positions)):
-                    if element[cell]['living_trees'][tp] == 1:
+                    if element[cell]['living_trees'][tp[1], tp[0]] == 1:
                         cellular_state[cell] += 2 ** i
-                        ...
-                
+                if 'position' in element[cell]['agt']:
+                    cellular_state[cell] += (element[cell]['agt']['position'][0] * grid_shape[1] + element[cell]['agt']['position'][1]) * 2 ** tree_positions.sum()
+                else:
+                    cellular_state[cell] += grid_shape[0] * grid_shape[1] * 2 ** tree_positions.sum()
             return cellular_state
         else:
             raise ValueError('space must be either action or state')
@@ -308,6 +310,25 @@ class PriorKnowledge():
                         ]
                     )
             return tuple(action)
+        elif space == 'state':
+            state = [{'agt': {}, 'living_trees': np.zeros(shape=grid_shape, dtype=int)} for _ in range(self.n_cells)]
+            for cell in range(self.n_cells):
+                tmp = cp.deepcopy(cellular_element[cell])
+                arr = np.zeros(shape=grid_shape, dtype=int)
+                for i, tp in enumerate(np.nonzero(tree_positions)):
+                    arr[tp[1], tp[0]] = cp.deepcopy(tmp % 2)
+                    tmp = tmp // 2
+                state[cell]['living_trees'] = cp.deepcopy(arr)
+                if tmp < grid_shape[0] * grid_shape[1]:
+                    state[cell]['agt']['position'] = np.array(
+                        [
+                            tmp // grid_shape[1],
+                            tmp % grid_shape[1],
+                        ]
+                    )
+            return tuple(state)
+        else:
+            raise ValueError('space must be either action or state')
         
     def tabularize(self, element, space: str):
 

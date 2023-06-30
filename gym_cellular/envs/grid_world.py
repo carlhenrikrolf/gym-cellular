@@ -264,10 +264,19 @@ class PriorKnowledge():
 
 
     def available_actions(self, state):
-        action_template = [{'go_to': {}} for _ in range(self.n_cells)] 
-        for cell in range(self.n_cells):
+        # check validity of state
+        n_positions = 0
+        cell = None
+        for c in range(self.n_cells):
             if 'position' in state[cell]['agt']:
-                break
+                cell = c
+                n_positions += 1
+            if (tree_positions - state[cell]['living_trees']).min() <= 1:
+                return []
+        if n_positions != 1:
+            return []
+        # check availability of actions
+        action_template = [{'go_to': {}} for _ in range(self.n_cells)] 
         other_cell = 0 if cell == 1 else 1
         if (state[cell]['agt']['position'] == np.array([0, 0])).all():
             stay = cp.deepcopy(action_template)
@@ -305,6 +314,8 @@ class PriorKnowledge():
             out = cp.deepcopy(action_template)
             out[other_cell]['go_to']['position'] = np.array([0, 1])
             return [tuple(stay), tuple(up), tuple(left), tuple(out)]
+        else:
+            return []
         
         
     def is_available(self, state, action):

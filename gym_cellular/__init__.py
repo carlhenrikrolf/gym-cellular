@@ -37,3 +37,9 @@ register(
     entry_point='gym_cellular.envs:Cells3ResetVDeadlockEnv',
     max_episode_steps=None,
 )
+
+register(
+    id='gym_cellular/GridWorld-v0',
+    entry_point='gym_cellular.envs:GridWorldEnv',
+    max_episode_steps=None,
+)

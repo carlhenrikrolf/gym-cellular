@@ -40,6 +40,7 @@ def reward_func(state, action, next_state):
 
 # the enviroment class
 class GridWorldEnv(gym.Env):
+
     def __init__(self, **kwargs):
         self.prior_knowledge = PriorKnowledge(**kwargs)
         self._state_space = gym.spaces.Tuple(
@@ -85,9 +86,23 @@ class GridWorldEnv(gym.Env):
 
         self.reward_range = (0, 1)
 
-        self.reward_func = reward_func
+        if 'reward_func' in kwargs:
+            self.reward_func = kwargs['reward_func']
+        else:
+            self.reward_func = reward_func
 
         self.data = {}
+
+
+    def reset(self):
+        self.state = cp.deepcopy(self.prior_knowledge.initial_state)
+        self.reward = 0.0
+        self.data['side_effects_incidence'] = 0.0
+        self.side_effects = self.side_effects_func(self.state)
+        info = self.get_info()
+        self.data['time_step'] = 0
+        return self.state, info
+    
 
     def step(self, action):
         next_state = self.transition_func(self.state, action)
@@ -99,15 +114,6 @@ class GridWorldEnv(gym.Env):
         info = self.get_info()
         self.data['time_step'] += 1
         return self.state, self.reward, terminated, truncated, info
-
-    def reset(self):
-        self.state = cp.deepcopy(self.prior_knowledge.initial_state)
-        self.reward = 0.0
-        self.data['side_effects_incidence'] = 0.0
-        self.side_effects = self.side_effects_func(self.state)
-        info = self.get_info()
-        self.data['time_step'] = 0
-        return self.state, info
     
 
     def transition_func(self, state, action):
@@ -158,6 +164,7 @@ class GridWorldEnv(gym.Env):
         self.data['side_effects_incidence'] = n_barren_jurisdictions / n_jurisdictions
         return cp.deepcopy(tuple(next_state))
     
+    
     def side_effects_func(self, state):
         side_effects = np.array(
             [['silent'] * grid_shape[0]] * grid_shape[1]
@@ -171,6 +178,7 @@ class GridWorldEnv(gym.Env):
                 side_effects[0,0] = 'safe'
         return side_effects
     
+    
     def _state_space_sample(self):
         state = cp.deepcopy(self._state_space.sample())
         other_jurisdiction = np.random.randint(n_jurisdictions)
@@ -179,11 +187,13 @@ class GridWorldEnv(gym.Env):
             state[jurisdiction]['living_trees'] *= tree_positions
         return state
     
+    
     def _action_space_sample(self):
         action = cp.deepcopy(self._action_space.sample())
         other_jurisdiction = np.random.randint(n_jurisdictions)
         action[other_jurisdiction]['go_to'] = {}
         return action
+    
     
     def get_info(self):
         info = {'side_effects': self.side_effects}
@@ -192,11 +202,13 @@ class GridWorldEnv(gym.Env):
 
     def get_state(self):
         return self.state
+    
+
 
 # the prior knowledge class
 class PriorKnowledge():
-    def __init__(self, **kwargs):
 
+    def __init__(self, **kwargs):
         # defind quantities
         self.n_cells = n_jurisdictions
         self.n_intracellular_actions = grid_shape[0] * grid_shape[1] + 1
@@ -226,7 +238,7 @@ class PriorKnowledge():
         self.initial_state = (
             {
                 'agt': {
-                    'position': (1, 1),
+                    'position': np.array([1, 1], dtype=int),
                 },
                 'living_trees': np.array(
                     [
@@ -249,6 +261,7 @@ class PriorKnowledge():
         # derived quantities
         self.n_states = self.n_intracellular_states ** self.n_cells # overestimate
         self.n_actions = self.n_intracellular_actions ** self.n_cells #overestimate
+
 
     def available_actions(self, state):
         action_template = [{'go_to': {}} for _ in range(self.n_cells)] 
@@ -293,6 +306,7 @@ class PriorKnowledge():
             out[other_cell]['go_to']['position'] = np.array([0, 1])
             return [tuple(stay), tuple(up), tuple(left), tuple(out)]
         
+        
     def is_available(self, state, action):
         for available_action in self.available_actions(state):
             output = True
@@ -307,9 +321,9 @@ class PriorKnowledge():
             if output is True:
                 break
         return output
+    
 
     def cellularize(self, element, space: str):
-
         if space == 'action':
             cellular_action = np.zeros(
                 shape=self.n_cells,
@@ -335,8 +349,8 @@ class PriorKnowledge():
         else:
             raise ValueError('space must be either action or state')
         
-    def decellularize(self, cellular_element, space: str):
 
+    def decellularize(self, cellular_element, space: str):
         if space == 'action':
             action = [{'go_to': {}} for _ in range(self.n_cells)]
             for cell in range(self.n_cells):
@@ -368,8 +382,8 @@ class PriorKnowledge():
         else:
             raise ValueError('space must be either action or state')
         
-    def tabularize(self, element, space: str):
 
+    def tabularize(self, element, space: str):
         if space == 'action':
             cellular_action = self.cellularize(element, space='action')
             tabular_action = generalized_cellular2tabular(cellular_action, self.action_space)
@@ -380,9 +394,9 @@ class PriorKnowledge():
             return tabular_state
         else:
             raise ValueError('space must be either action or state')
+        
     
     def detabularize(self, tabular_element, space: str):
-
         if space == 'action':
             cellular_action = generalized_tabular2cellular(tabular_element, self.action_space)
             action = self.decellularize(cellular_action, space='action')
@@ -394,5 +408,21 @@ class PriorKnowledge():
         else:
             raise ValueError('space must be either action or state')
         
+
     def initial_policy(self, state):
-        ...
+        action = [{'go_to': {}} for _ in range(self.n_cells)]
+        for cell in range(self.n_cells):
+            another_cell = (cell + 1) % self.n_cells
+            if 'position' in state[cell]['agt']:
+                if (state[cell]['agt']['position'] == [1, 1]).all():
+                    action[another_cell]['go_to']['position'] = np.array([1, 0])
+                elif (state[cell]['agt']['position'] == [1, 0]).all():
+                    action[another_cell]['go_to']['position'] = np.array([1, 1])
+                elif (state[cell]['agt']['position'] == [0, 1]).all():
+                    action[cell]['go_to']['position'] = np.array([1, 1])
+                elif (state[cell]['agt']['position'] == [0, 0]).all():
+                    action[cell]['go_to']['position'] = np.array([1, 0])
+                else:
+                    raise ValueError('invalid agent position')
+        return tuple(action)
+            

@@ -3,6 +3,7 @@ from gym_cellular.envs.utils.generalized_space_transformations import generalize
 import copy as cp
 import gymnasium as gym
 import numpy as np
+import time
 
 n_cells = 3
 
@@ -73,6 +74,14 @@ class Cells3ResetVDeadlockEnv(gym.Env):
             **kwargs,
         ):
 
+        if 'env_seed' in kwargs:
+            self.env_seed = kwargs['env_seed']
+        else:
+            self.env_seed = None
+        if self.env_seed is None:
+            self.env_seed = int(str(time.time_ns())[-9:])
+        np.random.seed(self.env_seed)
+
         self.prior_knowledge = PriorKnowledge(**kwargs)
         self.n_cells = self.prior_knowledge.n_cells
         self.initial_state = self.prior_knowledge.initial_state
@@ -119,6 +128,7 @@ class Cells3ResetVDeadlockEnv(gym.Env):
 
 
     def reset(self, seed=0):
+        np.random.seed(self.env_seed)
         self.reward = 0.0
         self.data['side_effects_incidence'] = 0.0
         self.side_effects=np.array(
